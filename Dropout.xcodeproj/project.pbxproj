@@ -1,0 +1,374 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		08FE4888ACFDED2E99FC2711 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B804EA14144A09D6DC12B8DA /* SystemConfiguration.framework */; };
+		093F857AE57B9D819771450E /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F25563727E7BE2F5FCC1FA2 /* MenuBarController.swift */; };
+		193D03E66C7076199AFAF925 /* WiFiMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E913E488C77AC522D6F4153 /* WiFiMonitor.swift */; };
+		259F3DB02B65348CF8BFB475 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800F332FBEEBBB71807A77C5 /* NetworkMonitor.swift */; };
+		2955BD65B54E638941EBE803 /* CoreWLAN.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 86EBC2F563E86AD26E8F48AB /* CoreWLAN.framework */; };
+		36836D40381CA56A50E1AF8C /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C862813055DA835AEBFC8DF /* main.swift */; };
+		39913010AB1E11B9B12A4F22 /* ISPReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDBABE95BB61614804EDF33 /* ISPReport.swift */; };
+		42DD2C84C8A6AA3ACE0F4139 /* WebhookService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6EFF4B372C60752DB750D5 /* WebhookService.swift */; };
+		4E22C3E92F6B6AA2DE78C53D /* ConnectionQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747C189C59C08FEF0EF0ACFC /* ConnectionQuality.swift */; };
+		5CFD1AD30CB9912AB78D9681 /* DropoutApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED2C35FF5C95E2BD451B69B /* DropoutApp.swift */; };
+		739243925CFE18AD6AF4E534 /* WiFiEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22775DC3CF3A4A4291EC110A /* WiFiEvent.swift */; };
+		9C84578A739A53076188E171 /* EventLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C24219C6B2BD47C3D21800D /* EventLog.swift */; };
+		9E16F2FB37B0A589277CB75C /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52575A293F9956706ECD075 /* LocationManager.swift */; };
+		F0FFB0B43B5DF2E6287CA270 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FE7BA1B9420DE4DBD56FDC8 /* NotificationService.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		22775DC3CF3A4A4291EC110A /* WiFiEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiEvent.swift; sourceTree = "<group>"; };
+		4C24219C6B2BD47C3D21800D /* EventLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLog.swift; sourceTree = "<group>"; };
+		4E913E488C77AC522D6F4153 /* WiFiMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiMonitor.swift; sourceTree = "<group>"; };
+		4F25563727E7BE2F5FCC1FA2 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		4FDBABE95BB61614804EDF33 /* ISPReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISPReport.swift; sourceTree = "<group>"; };
+		6C862813055DA835AEBFC8DF /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		747C189C59C08FEF0EF0ACFC /* ConnectionQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionQuality.swift; sourceTree = "<group>"; };
+		800F332FBEEBBB71807A77C5 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
+		86EBC2F563E86AD26E8F48AB /* CoreWLAN.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreWLAN.framework; path = System/Library/Frameworks/CoreWLAN.framework; sourceTree = SDKROOT; };
+		9ED2C35FF5C95E2BD451B69B /* DropoutApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropoutApp.swift; sourceTree = "<group>"; };
+		9FE7BA1B9420DE4DBD56FDC8 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		B804EA14144A09D6DC12B8DA /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+		D52575A293F9956706ECD075 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+		DA7539AC5CD295B8D8FC19CF /* Dropout.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dropout.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE6EFF4B372C60752DB750D5 /* WebhookService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebhookService.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		77D816B89B64E448E97E773D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2955BD65B54E638941EBE803 /* CoreWLAN.framework in Frameworks */,
+				08FE4888ACFDED2E99FC2711 /* SystemConfiguration.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4295A33A0DA57C429C1D9948 = {
+			isa = PBXGroup;
+			children = (
+				BE1FF02E22253266B9E5B63B /* Sources */,
+				9A3CAD323765D7825A56194B /* Frameworks */,
+				C35A35B47FFFCC6CFFDA1B72 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9A3CAD323765D7825A56194B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				86EBC2F563E86AD26E8F48AB /* CoreWLAN.framework */,
+				B804EA14144A09D6DC12B8DA /* SystemConfiguration.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		BA720AC06E8BD4F2695B955C /* Dropout */ = {
+			isa = PBXGroup;
+			children = (
+				747C189C59C08FEF0EF0ACFC /* ConnectionQuality.swift */,
+				9ED2C35FF5C95E2BD451B69B /* DropoutApp.swift */,
+				4C24219C6B2BD47C3D21800D /* EventLog.swift */,
+				4FDBABE95BB61614804EDF33 /* ISPReport.swift */,
+				D52575A293F9956706ECD075 /* LocationManager.swift */,
+				6C862813055DA835AEBFC8DF /* main.swift */,
+				4F25563727E7BE2F5FCC1FA2 /* MenuBarController.swift */,
+				800F332FBEEBBB71807A77C5 /* NetworkMonitor.swift */,
+				9FE7BA1B9420DE4DBD56FDC8 /* NotificationService.swift */,
+				EE6EFF4B372C60752DB750D5 /* WebhookService.swift */,
+				22775DC3CF3A4A4291EC110A /* WiFiEvent.swift */,
+				4E913E488C77AC522D6F4153 /* WiFiMonitor.swift */,
+			);
+			path = Dropout;
+			sourceTree = "<group>";
+		};
+		BE1FF02E22253266B9E5B63B /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				BA720AC06E8BD4F2695B955C /* Dropout */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		C35A35B47FFFCC6CFFDA1B72 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DA7539AC5CD295B8D8FC19CF /* Dropout.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D1EF79933CD1C12C5A7803C3 /* Dropout */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B2CAFA3F94BDB3D6A2C33571 /* Build configuration list for PBXNativeTarget "Dropout" */;
+			buildPhases = (
+				0C854C6034ACB472881C168B /* Sources */,
+				77D816B89B64E448E97E773D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Dropout;
+			packageProductDependencies = (
+			);
+			productName = Dropout;
+			productReference = DA7539AC5CD295B8D8FC19CF /* Dropout.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BFC17787EA274DCCC3EBECAE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					D1EF79933CD1C12C5A7803C3 = {
+						DevelopmentTeam = 36D97ZTP6J;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 355F34A4387F491EFC9C02C7 /* Build configuration list for PBXProject "Dropout" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 4295A33A0DA57C429C1D9948;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D1EF79933CD1C12C5A7803C3 /* Dropout */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0C854C6034ACB472881C168B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4E22C3E92F6B6AA2DE78C53D /* ConnectionQuality.swift in Sources */,
+				5CFD1AD30CB9912AB78D9681 /* DropoutApp.swift in Sources */,
+				9C84578A739A53076188E171 /* EventLog.swift in Sources */,
+				39913010AB1E11B9B12A4F22 /* ISPReport.swift in Sources */,
+				9E16F2FB37B0A589277CB75C /* LocationManager.swift in Sources */,
+				093F857AE57B9D819771450E /* MenuBarController.swift in Sources */,
+				259F3DB02B65348CF8BFB475 /* NetworkMonitor.swift in Sources */,
+				F0FFB0B43B5DF2E6287CA270 /* NotificationService.swift in Sources */,
+				42DD2C84C8A6AA3ACE0F4139 /* WebhookService.swift in Sources */,
+				739243925CFE18AD6AF4E534 /* WiFiEvent.swift in Sources */,
+				193D03E66C7076199AFAF925 /* WiFiMonitor.swift in Sources */,
+				36836D40381CA56A50E1AF8C /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0317CCB020D9064DF650C966 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/Dropout.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.meria.dropout;
+				PRODUCT_NAME = Dropout;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = APPSTORE;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		27D012DF0807C750E76E037D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 36D97ZTP6J;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		32A993036FDB8B1128A30F59 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 36D97ZTP6J;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		6B604C444E1EE0B4A64C5F97 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/Dropout.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.meria.dropout;
+				PRODUCT_NAME = Dropout;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		355F34A4387F491EFC9C02C7 /* Build configuration list for PBXProject "Dropout" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				27D012DF0807C750E76E037D /* Debug */,
+				32A993036FDB8B1128A30F59 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B2CAFA3F94BDB3D6A2C33571 /* Build configuration list for PBXNativeTarget "Dropout" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B604C444E1EE0B4A64C5F97 /* Debug */,
+				0317CCB020D9064DF650C966 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BFC17787EA274DCCC3EBECAE /* Project object */;
+}
