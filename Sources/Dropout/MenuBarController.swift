@@ -18,6 +18,8 @@ final class MenuBarController {
     private var recentEventItems: [NSMenuItem] = []
 
     var onExportLog: (() -> Void)?
+    var onOpenHooksFolder: (() -> Void)?
+    var onShowAbout: (() -> Void)?
     var onQuit: (() -> Void)?
 
     func setup() {
@@ -110,7 +112,23 @@ final class MenuBarController {
         exportItem.target = self
         menu.addItem(exportItem)
 
+        let hooksItem = NSMenuItem(
+            title: "Event Hooks...",
+            action: #selector(openHooksFolder(_:)),
+            keyEquivalent: ""
+        )
+        hooksItem.target = self
+        menu.addItem(hooksItem)
+
         menu.addItem(NSMenuItem.separator())
+
+        let aboutItem = NSMenuItem(
+            title: "About Dropout",
+            action: #selector(showAbout(_:)),
+            keyEquivalent: ""
+        )
+        aboutItem.target = self
+        menu.addItem(aboutItem)
 
         let quitItem = NSMenuItem(
             title: "Quit Dropout",
@@ -248,6 +266,14 @@ final class MenuBarController {
 
     @objc private func exportLog(_ sender: NSMenuItem) {
         onExportLog?()
+    }
+
+    @objc private func openHooksFolder(_ sender: NSMenuItem) {
+        onOpenHooksFolder?()
+    }
+
+    @objc private func showAbout(_ sender: NSMenuItem) {
+        onShowAbout?()
     }
 
     @objc private func quit(_ sender: NSMenuItem) {

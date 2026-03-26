@@ -1,0 +1,113 @@
+import Foundation
+
+/// Runs user-configured scripts on WiFi events.
+/// Scripts are stored in ~/Library/Application Support/Dropout/hooks/
+/// Named by event type: on-disconnect.sh, on-connect.sh, on-signal-weak.sh, etc.
+final class WebhookService {
+    private let hooksDir: URL
+    private let queue = DispatchQueue(label: "com.dropout.hooks", qos: .utility)
+
+    init() {
+        let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first!
+        hooksDir = appSupport.appendingPathComponent("Dropout/hooks")
+        try? FileManager.default.createDirectory(at: hooksDir, withIntermediateDirectories: true)
+        seedReadme()
+    }
+
+    func fire(event: WiFiEvent) {
+        let scriptName = scriptName(for: event.type)
+        let scriptURL = hooksDir.appendingPathComponent(scriptName)
+
+        guard FileManager.default.isExecutableFile(atPath: scriptURL.path) else { return }
+
+        queue.async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = [scriptURL.path]
+            process.environment = [
+                "DROPOUT_EVENT": event.type.rawValue,
+                "DROPOUT_SSID": event.ssid ?? "",
+                "DROPOUT_BSSID": event.bssid ?? "",
+                "DROPOUT_RSSI": event.rssi.map(String.init) ?? "",
+                "DROPOUT_DETAILS": event.details ?? "",
+                "DROPOUT_TIMESTAMP": ISO8601DateFormatter().string(from: event.timestamp),
+            ]
+
+            // Redirect output to log
+            let appSupport = FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask
+            ).first!
+            let logPath = appSupport.appendingPathComponent("Dropout/hooks.log")
+            let logHandle = FileHandle(forWritingAtPath: logPath.path)
+                ?? { FileManager.default.createFile(atPath: logPath.path, contents: nil); return FileHandle(forWritingAtPath: logPath.path)! }()
+            logHandle.seekToEndOfFile()
+            process.standardOutput = logHandle
+            process.standardError = logHandle
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+            } catch {
+                print("dropout: hook failed (\(scriptName)): \(error)")
+            }
+        }
+    }
+
+    private func scriptName(for type: WiFiEventType) -> String {
+        switch type {
+        case .disconnected: return "on-disconnect.sh"
+        case .connected: return "on-connect.sh"
+        case .ssidChanged: return "on-ssid-change.sh"
+        case .signalDegraded: return "on-signal-weak.sh"
+        case .signalRecovered: return "on-signal-recovered.sh"
+        case .internetLost: return "on-internet-lost.sh"
+        case .internetRestored: return "on-internet-restored.sh"
+        case .powerOn: return "on-power-on.sh"
+        case .powerOff: return "on-power-off.sh"
+        }
+    }
+
+    /// Create a README in the hooks directory so users know what to do
+    private func seedReadme() {
+        let readme = hooksDir.appendingPathComponent("README.txt")
+        guard !FileManager.default.fileExists(atPath: readme.path) else { return }
+
+        let content = """
+            Dropout Hooks
+            =============
+
+            Place executable shell scripts here to run on WiFi events.
+            Scripts receive event data via environment variables.
+
+            Available hooks:
+              on-disconnect.sh      — WiFi disconnected
+              on-connect.sh         — WiFi reconnected
+              on-ssid-change.sh     — Switched to different network
+              on-signal-weak.sh     — Signal dropped below -75 dBm
+              on-signal-recovered.sh — Signal recovered above -65 dBm
+              on-internet-lost.sh   — WiFi up but no internet
+              on-internet-restored.sh — Internet back
+              on-power-on.sh        — WiFi radio turned on
+              on-power-off.sh       — WiFi radio turned off
+
+            Environment variables passed to each script:
+              DROPOUT_EVENT      — Event type (e.g., "disconnected")
+              DROPOUT_SSID       — Network name (if available)
+              DROPOUT_BSSID      — Access point MAC address
+              DROPOUT_RSSI       — Signal strength in dBm
+              DROPOUT_DETAILS    — Additional details
+              DROPOUT_TIMESTAMP  — ISO 8601 timestamp
+
+            Example (on-disconnect.sh):
+              #!/bin/bash
+              curl -X POST "https://hooks.slack.com/your/webhook" \\
+                -d "{\\"text\\":\\"WiFi dropped from $DROPOUT_SSID\\"}"
+
+            Make scripts executable: chmod +x on-disconnect.sh
+            Hook output is logged to: ~/Library/Application Support/Dropout/hooks.log
+            """
+        try? content.write(to: readme, atomically: true, encoding: .utf8)
+    }
+}

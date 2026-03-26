@@ -6,17 +6,46 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
     private let notificationService = NotificationService()
     private let eventLog = EventLog()
     private let menuBar = MenuBarController()
+    private let locationManager = LocationManager()
+    private let webhookService = WebhookService()
 
     private var refreshTimer: Timer?
 
+    // Throttling: prevent notification spam during WiFi flapping
+    private var lastNotificationTime: [WiFiEventType: Date] = [:]
+    private let throttleIntervals: [WiFiEventType: TimeInterval] = [
+        .disconnected: 5,       // Max one disconnect notification per 5s
+        .connected: 5,          // Max one reconnect notification per 5s
+        .signalDegraded: 30,    // Max one signal warning per 30s
+        .signalRecovered: 30,
+        .internetLost: 10,
+        .internetRestored: 10,
+        .ssidChanged: 5,
+        .powerOn: 5,
+        .powerOff: 5,
+    ]
+
+    // MARK: - App Lifecycle
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Set defaults on first launch
         registerDefaults()
+
+        // Request location permission (required for SSID access on macOS 14+)
+        locationManager.requestAuthorization()
+        locationManager.onAuthorizationChanged = { [weak self] authorized in
+            if authorized {
+                // Re-read state now that we can see the SSID
+                let state = self?.wifiMonitor.currentState()
+                if let state { self?.menuBar.updateWiFiState(state) }
+            }
+        }
 
         // Setup menu bar
         menuBar.setup()
         menuBar.onExportLog = { [weak self] in self?.exportLog() }
         menuBar.onQuit = { NSApp.terminate(nil) }
+        menuBar.onOpenHooksFolder = { [weak self] in self?.openHooksFolder() }
+        menuBar.onShowAbout = { [weak self] in self?.showAbout() }
 
         // Wire up WiFi monitor
         wifiMonitor.onEvent = { [weak self] event in self?.handleEvent(event) }
@@ -29,13 +58,9 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.menuBar.updateInternetStatus(reachable: reachable)
 
-            if !reachable {
-                let event = WiFiEvent(type: .internetLost, ssid: self.wifiMonitor.currentState().ssid)
-                self.handleEvent(event)
-            } else {
-                let event = WiFiEvent(type: .internetRestored, ssid: self.wifiMonitor.currentState().ssid)
-                self.handleEvent(event)
-            }
+            let type: WiFiEventType = reachable ? .internetRestored : .internetLost
+            let event = WiFiEvent(type: type, ssid: self.wifiMonitor.currentState().ssid)
+            self.handleEvent(event)
         }
 
         // Start monitoring
@@ -46,9 +71,15 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
         menuBar.updateInternetStatus(reachable: networkMonitor.isInternetReachable)
         refreshUI()
 
-        // Periodic refresh for stats and recent events (every 30s)
+        // Periodic refresh (stats + recent events)
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.refreshUI()
+        }
+
+        // First launch onboarding
+        if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
+            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+            showWelcome()
         }
     }
 
@@ -61,10 +92,19 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
     // MARK: - Event Handling
 
     private func handleEvent(_ event: WiFiEvent) {
-        // Log to SQLite
+        // Always log
         eventLog.log(event)
 
-        // Send notification
+        // Always fire webhooks (user controls which hooks exist)
+        webhookService.fire(event: event)
+
+        // Throttle notifications
+        guard shouldNotify(for: event.type) else {
+            refreshUI()
+            return
+        }
+        lastNotificationTime[event.type] = Date()
+
         let soundEnabled = UserDefaults.standard.bool(forKey: "soundEnabled")
         let signalWarningsEnabled = UserDefaults.standard.bool(forKey: "signalWarningsEnabled")
 
@@ -96,7 +136,7 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
             notificationService.send(title: "Network Changed", body: body, sound: soundEnabled)
 
         case .signalDegraded:
-            guard signalWarningsEnabled else { return }
+            guard signalWarningsEnabled else { break }
             notificationService.send(
                 title: "WiFi Signal Weak",
                 body: "Signal at \(event.rssi ?? 0) dBm — connection may drop",
@@ -104,11 +144,11 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
             )
 
         case .signalRecovered:
-            guard signalWarningsEnabled else { return }
+            guard signalWarningsEnabled else { break }
             notificationService.send(
                 title: "WiFi Signal Recovered",
                 body: "Signal improved to \(event.rssi ?? 0) dBm",
-                sound: false  // Don't annoy on recovery
+                sound: false
             )
 
         case .internetLost:
@@ -135,13 +175,20 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
         case .powerOn:
             notificationService.send(
                 title: "WiFi Turned On",
-                body: "WiFi radio enabled — looking for networks",
+                body: "WiFi radio enabled — searching for networks",
                 sound: false
             )
         }
 
-        // Refresh UI
         refreshUI()
+    }
+
+    private func shouldNotify(for type: WiFiEventType) -> Bool {
+        guard let lastTime = lastNotificationTime[type],
+              let interval = throttleIntervals[type] else {
+            return true
+        }
+        return Date().timeIntervalSince(lastTime) >= interval
     }
 
     // MARK: - UI Refresh
@@ -167,6 +214,68 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
             guard response == .OK, let url = savePanel.url else { return }
             try? csv.write(to: url, atomically: true, encoding: .utf8)
         }
+    }
+
+    // MARK: - Hooks Folder
+
+    private func openHooksFolder() {
+        let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first!
+        let hooksDir = appSupport.appendingPathComponent("Dropout/hooks")
+        NSWorkspace.shared.open(hooksDir)
+    }
+
+    // MARK: - About
+
+    private func showAbout() {
+        let alert = NSAlert()
+        alert.messageText = "Dropout"
+        alert.informativeText = """
+            Version 1.0.0
+
+            Event-driven WiFi disconnect notifier for macOS.
+            Uses CoreWLAN — zero polling, zero battery impact.
+
+            © 2026 Jesse Meria
+            MIT License
+
+            github.com/jessemeria/dropout
+            """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+
+        // Bring app to front for the alert
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    // MARK: - Welcome
+
+    private func showWelcome() {
+        let alert = NSAlert()
+        alert.messageText = "Welcome to Dropout"
+        alert.informativeText = """
+            Dropout monitors your WiFi and notifies you the instant \
+            your connection drops — something macOS should do but doesn't.
+
+            You'll be asked to grant two permissions:
+
+            • Notifications — so Dropout can alert you
+            • Location — required by macOS to read WiFi network names \
+            (your location is never stored or sent anywhere)
+
+            Look for the WiFi icon in your menu bar.
+            """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Get Started")
+
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: - Defaults
