@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # Configuration
-APP_NAME="Dropout"
-BUNDLE_ID="com.meria.dropout"
+APP_NAME="SignalDrop"
+BUNDLE_ID="com.meria.signaldrop"
 VERSION="1.0.0"
 BUILD_NUMBER="1"
 DEVELOPER_ID="Developer ID Application: JESSE ROBERT MERIA (36D97ZTP6J)"
 TEAM_ID="36D97ZTP6J"
-ENTITLEMENTS="App/Dropout-DirectDistribution.entitlements"
+ENTITLEMENTS="App/SignalDrop-DirectDistribution.entitlements"
 
 # Paths
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,7 +26,7 @@ echo ""
 # Step 1: Clean and build
 echo "[1/6] Building binary..."
 swift build -c release 2>&1
-BINARY=".build/release/dropout"
+BINARY=".build/release/signaldrop"
 if [ ! -f "$BINARY" ]; then
     echo "ERROR: Build failed — binary not found."
     exit 1
@@ -53,8 +53,8 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$MACOS" "$RESOURCES"
 
 # Copy binary
-cp "$BINARY" "$MACOS/dropout"
-chmod +x "$MACOS/dropout"
+cp "$BINARY" "$MACOS/signaldrop"
+chmod +x "$MACOS/signaldrop"
 
 # Copy Info.plist with version injection
 sed -e "s/<string>1.0.0</<string>$VERSION</" \

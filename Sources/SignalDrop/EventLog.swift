@@ -5,13 +5,13 @@ private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.sel
 
 final class EventLog {
     private var db: OpaquePointer?
-    private let queue = DispatchQueue(label: "com.dropout.db")
+    private let queue = DispatchQueue(label: "com.signaldrop.db")
 
     init() {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first!
-        let dir = appSupport.appendingPathComponent("Dropout")
+        let dir = appSupport.appendingPathComponent("SignalDrop")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = dir.appendingPathComponent("events.db").path
 

@@ -1,17 +1,17 @@
 import Foundation
 
 /// Runs user-configured scripts on WiFi events.
-/// Scripts are stored in ~/Library/Application Support/Dropout/hooks/
+/// Scripts are stored in ~/Library/Application Support/SignalDrop/hooks/
 /// Named by event type: on-disconnect.sh, on-connect.sh, on-signal-weak.sh, etc.
 final class WebhookService {
     private let hooksDir: URL
-    private let queue = DispatchQueue(label: "com.dropout.hooks", qos: .utility)
+    private let queue = DispatchQueue(label: "com.signaldrop.hooks", qos: .utility)
 
     init() {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first!
-        hooksDir = appSupport.appendingPathComponent("Dropout/hooks")
+        hooksDir = appSupport.appendingPathComponent("SignalDrop/hooks")
         try? FileManager.default.createDirectory(at: hooksDir, withIntermediateDirectories: true)
         seedReadme()
     }
@@ -39,7 +39,7 @@ final class WebhookService {
             let appSupport = FileManager.default.urls(
                 for: .applicationSupportDirectory, in: .userDomainMask
             ).first!
-            let logPath = appSupport.appendingPathComponent("Dropout/hooks.log")
+            let logPath = appSupport.appendingPathComponent("SignalDrop/hooks.log")
             let logHandle = FileHandle(forWritingAtPath: logPath.path)
                 ?? { FileManager.default.createFile(atPath: logPath.path, contents: nil); return FileHandle(forWritingAtPath: logPath.path)! }()
             logHandle.seekToEndOfFile()
@@ -50,7 +50,7 @@ final class WebhookService {
                 try process.run()
                 process.waitUntilExit()
             } catch {
-                print("dropout: hook failed (\(scriptName)): \(error)")
+                print("signaldrop: hook failed (\(scriptName)): \(error)")
             }
         }
     }
@@ -106,7 +106,7 @@ final class WebhookService {
                 -d "{\\"text\\":\\"WiFi dropped from $DROPOUT_SSID\\"}"
 
             Make scripts executable: chmod +x on-disconnect.sh
-            Hook output is logged to: ~/Library/Application Support/Dropout/hooks.log
+            Hook output is logged to: ~/Library/Application Support/SignalDrop/hooks.log
             """
         try? content.write(to: readme, atomically: true, encoding: .utf8)
     }

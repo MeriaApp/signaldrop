@@ -73,7 +73,7 @@ final class WiFiMonitor: NSObject {
             do {
                 try client.startMonitoringEvent(with: event)
             } catch {
-                print("dropout: failed to monitor \(event): \(error)")
+                print("signaldrop: failed to monitor \(event): \(error)")
             }
         }
 
@@ -89,7 +89,7 @@ final class WiFiMonitor: NSObject {
         do {
             try client.stopMonitoringAllEvents()
         } catch {
-            print("dropout: failed to stop monitoring: \(error)")
+            print("signaldrop: failed to stop monitoring: \(error)")
         }
     }
 
@@ -123,7 +123,7 @@ final class WiFiMonitor: NSObject {
         guard let iface = client.interface() else { return }
         let ssid = iface.ssid()
         iface.disassociate()
-        print("dropout: disconnected from \(ssid ?? "unknown") — waiting for auto-rejoin")
+        print("signaldrop: disconnected from \(ssid ?? "unknown") — waiting for auto-rejoin")
     }
     #endif
 }

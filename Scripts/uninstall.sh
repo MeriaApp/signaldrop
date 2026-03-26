@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-BUNDLE_ID="com.meria.dropout"
-INSTALL_DIR="$HOME/Library/Application Support/Dropout"
+BUNDLE_ID="com.meria.signaldrop"
+INSTALL_DIR="$HOME/Library/Application Support/SignalDrop"
 LAUNCH_AGENT="$HOME/Library/LaunchAgents/$BUNDLE_ID.plist"
 
-echo "Stopping Dropout..."
+echo "Stopping SignalDrop..."
 launchctl bootout "gui/$(id -u)/$BUNDLE_ID" 2>/dev/null || true
 
 echo "Removing LaunchAgent..."
@@ -25,4 +25,4 @@ else
 fi
 
 echo ""
-echo "Dropout uninstalled."
+echo "SignalDrop uninstalled."

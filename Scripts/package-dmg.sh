@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="Dropout"
+APP_NAME="SignalDrop"
 VERSION="1.0.0"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

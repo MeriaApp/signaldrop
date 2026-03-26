@@ -1,17 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="Dropout"
-BUNDLE_ID="com.meria.dropout"
-INSTALL_DIR="$HOME/Library/Application Support/Dropout"
+APP_NAME="SignalDrop"
+BUNDLE_ID="com.meria.signaldrop"
+INSTALL_DIR="$HOME/Library/Application Support/SignalDrop"
 LAUNCH_AGENT="$HOME/Library/LaunchAgents/$BUNDLE_ID.plist"
-BINARY="$INSTALL_DIR/dropout"
+BINARY="$INSTALL_DIR/signaldrop"
 
-echo "Building Dropout..."
+echo "Building SignalDrop..."
 cd "$(dirname "$0")/.."
 swift build -c release 2>&1
 
-BUILT_BINARY=".build/release/dropout"
+BUILT_BINARY=".build/release/signaldrop"
 if [ ! -f "$BUILT_BINARY" ]; then
     echo "Build failed."
     exit 1
@@ -45,21 +45,21 @@ cat > "$LAUNCH_AGENT" << EOF
     <key>ProcessType</key>
     <string>Interactive</string>
     <key>StandardErrorPath</key>
-    <string>$INSTALL_DIR/dropout.log</string>
+    <string>$INSTALL_DIR/signaldrop.log</string>
 </dict>
 </plist>
 EOF
 
 # Load the agent
-echo "Starting Dropout..."
+echo "Starting SignalDrop..."
 launchctl bootout "gui/$(id -u)/$BUNDLE_ID" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT"
 
 echo ""
-echo "Dropout installed and running."
+echo "SignalDrop installed and running."
 echo "  Binary: $BINARY"
 echo "  Agent:  $LAUNCH_AGENT"
-echo "  Log:    $INSTALL_DIR/dropout.log"
+echo "  Log:    $INSTALL_DIR/signaldrop.log"
 echo "  Data:   $INSTALL_DIR/events.db"
 echo ""
 echo "Look for the WiFi icon in your menu bar."

@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Dropout",
+    name: "SignalDrop",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "dropout",
-            path: "Sources/Dropout",
+            name: "signaldrop",
+            path: "Sources/SignalDrop",
             linkerSettings: [
                 .linkedFramework("CoreWLAN"),
                 .linkedFramework("SystemConfiguration"),

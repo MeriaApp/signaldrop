@@ -1,6 +1,6 @@
 import AppKit
 
-final class DropoutApp: NSObject, NSApplicationDelegate {
+final class SignalDropApp: NSObject, NSApplicationDelegate {
     private let wifiMonitor = WiFiMonitor()
     private let networkMonitor = NetworkMonitor()
     private let notificationService = NotificationService()
@@ -274,7 +274,7 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first!
-        let hooksDir = appSupport.appendingPathComponent("Dropout/hooks")
+        let hooksDir = appSupport.appendingPathComponent("SignalDrop/hooks")
         NSWorkspace.shared.open(hooksDir)
     }
     #endif
@@ -329,7 +329,7 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
 
     private func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "Dropout"
+        alert.messageText = "SignalDrop"
         alert.informativeText = """
             Version 1.0.0
 
@@ -351,9 +351,9 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
 
     private func showWelcome() {
         let alert = NSAlert()
-        alert.messageText = "Welcome to Dropout"
+        alert.messageText = "Welcome to SignalDrop"
         alert.informativeText = """
-            Dropout monitors your WiFi and notifies you the instant \
+            SignalDrop monitors your WiFi and notifies you the instant \
             your connection drops — something macOS should do but doesn't.
 
             You'll be asked to grant two permissions:
@@ -362,7 +362,7 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
             \u{2022} Location — required by macOS to read WiFi network names \
             (your location is never stored or sent anywhere)
 
-            Tip: Since Dropout replaces Apple's WiFi icon, you can hide \
+            Tip: Since SignalDrop replaces Apple's WiFi icon, you can hide \
             the built-in one in System Settings \u{2192} Control Center \
             \u{2192} WiFi \u{2192} "Don't Show in Menu Bar."
 

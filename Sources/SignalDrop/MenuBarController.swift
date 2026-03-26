@@ -42,7 +42,7 @@ final class MenuBarController {
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "wifi",
-                accessibilityDescription: "Dropout — WiFi Monitor"
+                accessibilityDescription: "SignalDrop — WiFi Monitor"
             )
         }
 
@@ -182,7 +182,7 @@ final class MenuBarController {
 
         // ── Footer ──
         let aboutItem = NSMenuItem(
-            title: "About Dropout",
+            title: "About SignalDrop",
             action: #selector(showAboutAction(_:)),
             keyEquivalent: ""
         )
@@ -190,7 +190,7 @@ final class MenuBarController {
         menu.addItem(aboutItem)
 
         let quitItem = NSMenuItem(
-            title: "Quit Dropout",
+            title: "Quit SignalDrop",
             action: #selector(quit(_:)),
             keyEquivalent: "q"
         )
@@ -378,7 +378,7 @@ final class MenuBarController {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                print("dropout: login item toggle failed: \(error)")
+                print("signaldrop: login item toggle failed: \(error)")
             }
         }
     }

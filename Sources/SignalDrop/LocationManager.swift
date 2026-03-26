@@ -28,8 +28,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
             manager.requestAlwaysAuthorization()
         case .denied, .restricted:
             // User denied — can't re-prompt, would need to open System Settings
-            print("dropout: location authorization denied — SSID names unavailable")
-            print("dropout: enable in System Settings > Privacy & Security > Location Services")
+            print("signaldrop: location authorization denied — SSID names unavailable")
+            print("signaldrop: enable in System Settings > Privacy & Security > Location Services")
         default:
             break
         }

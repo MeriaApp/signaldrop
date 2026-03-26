@@ -3,7 +3,7 @@ import Network
 
 final class NetworkMonitor {
     private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "com.dropout.network")
+    private let queue = DispatchQueue(label: "com.signaldrop.network")
 
     private(set) var isInternetReachable = true
     private(set) var interfaceType: NWInterface.InterfaceType = .wifi
