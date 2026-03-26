@@ -362,6 +362,10 @@ final class DropoutApp: NSObject, NSApplicationDelegate {
             \u{2022} Location — required by macOS to read WiFi network names \
             (your location is never stored or sent anywhere)
 
+            Tip: Since Dropout replaces Apple's WiFi icon, you can hide \
+            the built-in one in System Settings \u{2192} Control Center \
+            \u{2192} WiFi \u{2192} "Don't Show in Menu Bar."
+
             Look for the WiFi icon in your menu bar.
             """
         alert.alertStyle = .informational
