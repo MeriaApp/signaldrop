@@ -1,3 +1,4 @@
+#if !APPSTORE
 import Foundation
 
 /// Runs user-configured scripts on WiFi events.
@@ -111,3 +112,4 @@ final class WebhookService {
         try? content.write(to: readme, atomically: true, encoding: .utf8)
     }
 }
+#endif
