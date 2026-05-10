@@ -27,6 +27,7 @@ final class MenuBarController {
     // Callbacks
     var onExportLog: (() -> Void)?
     var onExportReport: (() -> Void)?
+    var onCopyReceipt: (() -> Void)?
     var onShowAbout: (() -> Void)?
     var onQuit: (() -> Void)?
 
@@ -41,7 +42,7 @@ final class MenuBarController {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             button.image = NSImage(
-                systemSymbolName: "wifi",
+                systemSymbolName: "dot.radiowaves.left.and.right",
                 accessibilityDescription: "SignalDrop — WiFi Monitor"
             )
         }
@@ -168,6 +169,15 @@ final class MenuBarController {
         reportItem.target = self
         menu.addItem(reportItem)
 
+        let receiptItem = NSMenuItem(
+            title: "Copy Receipt for Support",
+            action: #selector(copyReceipt(_:)),
+            keyEquivalent: "C"
+        )
+        receiptItem.keyEquivalentModifierMask = [NSEvent.ModifierFlags.command, .shift]
+        receiptItem.target = self
+        menu.addItem(receiptItem)
+
         #if !APPSTORE
         let hooksItem = NSMenuItem(
             title: "Event Hooks...",
@@ -211,10 +221,10 @@ final class MenuBarController {
 
             let iconName: String
             switch state.signalQuality {
-            case .excellent, .good: iconName = "wifi"
-            case .fair: iconName = "wifi"
-            case .weak: iconName = "wifi.exclamationmark"
-            case .none: iconName = "wifi.slash"
+            case .excellent, .good: iconName = "dot.radiowaves.left.and.right"
+            case .fair: iconName = "dot.radiowaves.left.and.right"
+            case .weak: iconName = "dot.radiowaves.forward"
+            case .none: iconName = "dot.radiowaves.up.forward"
             }
             statusItem.button?.image = NSImage(
                 systemSymbolName: iconName,
@@ -224,14 +234,14 @@ final class MenuBarController {
             statusMenuItem.title = "WiFi Off"
             signalMenuItem.isHidden = true
             statusItem.button?.image = NSImage(
-                systemSymbolName: "wifi.slash",
+                systemSymbolName: "antenna.radiowaves.left.and.right.slash",
                 accessibilityDescription: "WiFi Off"
             )
         } else {
             statusMenuItem.title = "Disconnected"
             signalMenuItem.isHidden = true
             statusItem.button?.image = NSImage(
-                systemSymbolName: "wifi.slash",
+                systemSymbolName: "antenna.radiowaves.left.and.right.slash",
                 accessibilityDescription: "WiFi Disconnected"
             )
         }
@@ -350,6 +360,10 @@ final class MenuBarController {
 
     @objc private func exportReport(_ sender: NSMenuItem) {
         onExportReport?()
+    }
+
+    @objc private func copyReceipt(_ sender: NSMenuItem) {
+        onCopyReceipt?()
     }
 
     @objc private func showAboutAction(_ sender: NSMenuItem) {

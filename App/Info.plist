@@ -7,7 +7,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>SignalDrop</string>
 	<key>CFBundleExecutable</key>
-	<string>signaldrop</string>
+	<string>SignalDrop</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIconName</key>
@@ -39,9 +39,9 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Jesse Meria. MIT License.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>Dropout needs location access to display your WiFi network name. Your location is never stored or sent anywhere.</string>
+	<string>SignalDrop needs location access to display your WiFi network name. Your location is never stored or sent anywhere.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Dropout needs location access to display your WiFi network name. Your location is never stored or sent anywhere.</string>
+	<string>SignalDrop needs location access to display your WiFi network name. Your location is never stored or sent anywhere.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
 </dict>

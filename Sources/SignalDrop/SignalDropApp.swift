@@ -9,6 +9,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     private let locationManager = LocationManager()
     private lazy var connectionQuality = ConnectionQuality(eventLog: eventLog)
     private lazy var ispReport = ISPReport(eventLog: eventLog, connectionQuality: connectionQuality)
+    private lazy var ispReceipt = ISPReceipt(eventLog: eventLog, connectionQuality: connectionQuality)
 
     #if !APPSTORE
     private let webhookService = WebhookService()
@@ -21,6 +22,11 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     private var deadNetworkSSID: String?
     private let deadNetworkTimeout: TimeInterval = 15
     #endif
+
+    // Recent-event window used by disconnect-cause classifier
+    private var lastSignalDegradedAt: Date?
+    private var lastInternetLostAt: Date?
+    private let causeWindow: TimeInterval = 60
 
     // Throttling: prevent notification spam during WiFi flapping
     private var lastNotificationTime: [WiFiEventType: Date] = [:]
@@ -61,6 +67,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         menuBar.setup()
         menuBar.onExportLog = { [weak self] in self?.exportLog() }
         menuBar.onExportReport = { [weak self] in self?.ispReport.saveReport() }
+        menuBar.onCopyReceipt = { [weak self] in self?.copyReceiptToClipboard() }
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.onShowAbout = { [weak self] in self?.showAbout() }
 
@@ -83,14 +90,20 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             self.menuBar.updateInternetStatus(reachable: reachable)
 
             if !reachable {
-                let currentSSID = self.wifiMonitor.currentState().ssid
+                let wifiState = self.wifiMonitor.currentState()
+                let currentSSID = wifiState.ssid
 
                 #if !APPSTORE
                 self.deadNetworkSSID = currentSSID
                 self.startDeadNetworkTimer()
                 #endif
 
-                let event = WiFiEvent(type: .internetLost, ssid: currentSSID)
+                // If WiFi is still connected when internet drops, that's
+                // strong signal it's an ISP-side outage (not a local WiFi issue).
+                let details: String? = wifiState.isConnected ? "ISP outage suspected" : nil
+
+                self.lastInternetLostAt = Date()
+                let event = WiFiEvent(type: .internetLost, ssid: currentSSID, details: details)
                 self.handleEvent(event)
             } else {
                 #if !APPSTORE
@@ -125,7 +138,20 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     // MARK: - Event Handling
 
     private func handleEvent(_ event: WiFiEvent) {
-        eventLog.log(event)
+        // Track signal-degraded timing for the disconnect-cause classifier.
+        if event.type == .signalDegraded {
+            lastSignalDegradedAt = Date()
+        }
+
+        // Classify a fresh disconnect by looking at the last 60s of events.
+        let enriched: WiFiEvent
+        if event.type == .disconnected {
+            enriched = classifyDisconnect(event)
+        } else {
+            enriched = event
+        }
+
+        eventLog.log(enriched)
 
         #if !APPSTORE
         webhookService.fire(event: event)
@@ -213,6 +239,29 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         }
 
         refreshUI()
+    }
+
+    /// Tag a disconnect with a likely-cause label based on the last 60s of events.
+    private func classifyDisconnect(_ event: WiFiEvent) -> WiFiEvent {
+        let now = Date()
+        let cause: String?
+        if let t = lastInternetLostAt, now.timeIntervalSince(t) < causeWindow {
+            cause = "Internet went out first"
+        } else if let t = lastSignalDegradedAt, now.timeIntervalSince(t) < causeWindow {
+            cause = "Weak signal preceded drop"
+        } else {
+            cause = "Sudden disconnect"
+        }
+        return WiFiEvent(
+            type: event.type,
+            ssid: event.ssid,
+            bssid: event.bssid,
+            rssi: event.rssi,
+            transmitRate: event.transmitRate,
+            details: cause,
+            id: event.id,
+            timestamp: event.timestamp
+        )
     }
 
     private func shouldNotify(for type: WiFiEventType) -> Bool {
@@ -316,7 +365,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         let csv = eventLog.exportCSV()
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.commaSeparatedText]
-        savePanel.nameFieldStringValue = "dropout-log.csv"
+        savePanel.nameFieldStringValue = "signaldrop-log.csv"
         savePanel.canCreateDirectories = true
 
         savePanel.begin { response in
@@ -325,16 +374,32 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Copy a short paste-friendly reliability summary to the clipboard so users
+    /// can drop it into ISP support chats with concrete data.
+    private func copyReceiptToClipboard() {
+        let text = ispReceipt.generate()
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+
+        notificationService.send(
+            title: "Receipt copied",
+            body: "Paste it into your ISP support chat for concrete reliability data.",
+            sound: false
+        )
+    }
+
     // MARK: - About
 
     private func showAbout() {
         let alert = NSAlert()
         alert.messageText = "SignalDrop"
         alert.informativeText = """
-            Version 1.0.0
+            Version 1.0.1
 
             Event-driven WiFi disconnect notifier for macOS.
-            Uses CoreWLAN — zero polling, zero battery impact.
+            Uses CoreWLAN — the OS pushes events the instant something \
+            changes, so SignalDrop adds minimal overhead.
 
             \u{00A9} 2026 Jesse Meria
             """
@@ -358,7 +423,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
 
             You'll be asked to grant two permissions:
 
-            \u{2022} Notifications — so Dropout can alert you
+            \u{2022} Notifications — so SignalDrop can alert you
             \u{2022} Location — required by macOS to read WiFi network names \
             (your location is never stored or sent anywhere)
 

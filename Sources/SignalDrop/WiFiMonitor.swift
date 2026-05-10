@@ -156,6 +156,9 @@ extension WiFiMonitor: CWEventDelegate {
         } else if !isConnected && wasConnected {
             // Disconnected
             disconnectTime = Date()
+            // Reset signal-degraded flag on disconnect so the next reconnect to
+            // a strong network can produce fresh weak-signal warnings later.
+            signalDegraded = false
             let event = WiFiEvent(
                 type: .disconnected,
                 ssid: previousSSID,

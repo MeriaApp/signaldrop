@@ -53,7 +53,8 @@ struct WiFiEvent {
         case .connected:
             return "Connected to \(ssid ?? "Unknown")"
         case .disconnected:
-            return "Disconnected\(ssid.map { " from \($0)" } ?? "")"
+            let base = "Disconnected\(ssid.map { " from \($0)" } ?? "")"
+            return details.map { "\(base) — \($0)" } ?? base
         case .ssidChanged:
             return "Switched to \(ssid ?? "Unknown")"
         case .signalDegraded:
@@ -61,7 +62,7 @@ struct WiFiEvent {
         case .signalRecovered:
             return "Signal recovered (\(rssi ?? 0) dBm)"
         case .internetLost:
-            return "Internet unreachable"
+            return details.map { "Internet unreachable — \($0)" } ?? "Internet unreachable"
         case .internetRestored:
             return "Internet restored"
         case .powerOn:
