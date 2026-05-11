@@ -39,6 +39,7 @@ final class MenuBarController {
     #if !APPSTORE
     var onOpenHooksFolder: (() -> Void)?
     var onDisconnect: (() -> Void)?
+    var onCheckForUpdates: (() -> Void)?
     #else
     var onOpenWiFiSettings: (() -> Void)?
     #endif
@@ -196,6 +197,16 @@ final class MenuBarController {
         menu.addItem(NSMenuItem.separator())
 
         // ── Footer ──
+        #if !APPSTORE
+        let checkForUpdatesItem = NSMenuItem(
+            title: "Check for Updates...",
+            action: #selector(checkForUpdatesAction(_:)),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.target = self
+        menu.addItem(checkForUpdatesItem)
+        #endif
+
         let aboutItem = NSMenuItem(
             title: "About SignalDrop",
             action: #selector(showAboutAction(_:)),
@@ -368,6 +379,10 @@ final class MenuBarController {
 
     @objc private func disconnectAction(_ sender: NSMenuItem) {
         onDisconnect?()
+    }
+
+    @objc private func checkForUpdatesAction(_ sender: NSMenuItem) {
+        onCheckForUpdates?()
     }
 
     @objc private func openHooksFolderAction(_ sender: NSMenuItem) {

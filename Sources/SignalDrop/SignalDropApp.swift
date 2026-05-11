@@ -14,6 +14,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
 
     #if !APPSTORE
     private let webhookService = WebhookService()
+    private let updater = UpdaterService()
     #endif
 
     private var refreshTimer: Timer?
@@ -86,6 +87,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         #if !APPSTORE
         menuBar.onOpenHooksFolder = { [weak self] in self?.openHooksFolder() }
         menuBar.onDisconnect = { [weak self] in self?.disconnectFromDeadNetwork() }
+        menuBar.onCheckForUpdates = { [weak self] in self?.updater.checkForUpdates(nil) }
         #else
         menuBar.onOpenWiFiSettings = { self.openWiFiSettings() }
         #endif

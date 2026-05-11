@@ -17,3 +17,4 @@ SignalDrop.xcodeproj/
 
 # Old project name (no longer needed)
 Dropout.xcodeproj/
+.release-archive/

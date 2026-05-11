@@ -7,6 +7,18 @@ options:
   generateEmptyDirectories: false
   createIntermediateGroups: true
 
+# Build configurations:
+#   - Debug:          Local development; sandbox on, APPSTORE flag on.
+#   - Release:        Mac App Store submission. Sandbox on, APPSTORE flag on,
+#                     Sparkle code paths compiled out. Universal binary.
+#   - ReleaseDirect:  Direct Distribution (DMG). No sandbox, no APPSTORE flag,
+#                     Sparkle auto-update active. Universal binary, Developer-ID
+#                     signed.
+configs:
+  Debug: debug
+  Release: release
+  ReleaseDirect: release
+
 settings:
   base:
     DEVELOPMENT_TEAM: 36D97ZTP6J
@@ -16,8 +28,21 @@ settings:
   configs:
     Debug:
       CODE_SIGN_IDENTITY: "Apple Development"
+      CODE_SIGN_STYLE: Automatic
     Release:
       CODE_SIGN_IDENTITY: "Apple Development"
+      CODE_SIGN_STYLE: Automatic
+    ReleaseDirect:
+      # Direct-Distribution build uses Developer ID, signed manually.
+      # build-app.sh overrides via xcodebuild flags for archive-time signing.
+      CODE_SIGN_IDENTITY: "Developer ID Application"
+      CODE_SIGN_STYLE: Manual
+      PROVISIONING_PROFILE_SPECIFIER: ""
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.7.0"
 
 targets:
   SignalDrop:
@@ -54,14 +79,13 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleInfoDictionaryVersion: "6.0"
         LSApplicationCategoryType: public.app-category.utilities
-    entitlements:
-      path: App/SignalDrop.entitlements
-      properties:
-        com.apple.security.app-sandbox: true
-        com.apple.security.network.client: true
-        com.apple.security.personal-information.location: true
-        com.apple.developer.networking.wifi-info: true
-        com.apple.security.files.user-selected.read-write: true
+        # Sparkle — only used in ReleaseDirect (Direct Distribution) builds.
+        # The App Store build never invokes Sparkle (gated by APPSTORE flag);
+        # leaving these keys present is harmless dead data.
+        SUFeedURL: https://jessemeria.com/signaldrop/appcast.xml
+        SUPublicEDKey: "2udxMzvjniZyxXxJ3ZBK1Coglm9KQsuvon3nqaD3XWI="
+        SUEnableInstallerLauncherService: true
+        SUEnableAutomaticChecks: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.meria.signaldrop
@@ -72,8 +96,9 @@ targets:
         ENABLE_HARDENED_RUNTIME: true
       configs:
         Debug:
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG APPSTORE"
           ONLY_ACTIVE_ARCH: YES
+          CODE_SIGN_ENTITLEMENTS: App/SignalDrop.entitlements
         Release:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: "APPSTORE"
           SWIFT_OPTIMIZATION_LEVEL: "-O"
@@ -82,6 +107,14 @@ targets:
           # users would otherwise see "Only works on Apple Silicon."
           ARCHS: "arm64 x86_64"
           ONLY_ACTIVE_ARCH: NO
+          CODE_SIGN_ENTITLEMENTS: App/SignalDrop.entitlements
+        ReleaseDirect:
+          # No APPSTORE flag → Sparkle code compiles in.
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          ARCHS: "arm64 x86_64"
+          ONLY_ACTIVE_ARCH: NO
+          CODE_SIGN_ENTITLEMENTS: App/SignalDrop-DirectDistribution.entitlements
     dependencies:
       - sdk: CoreWLAN.framework
       - sdk: SystemConfiguration.framework
+      - package: Sparkle

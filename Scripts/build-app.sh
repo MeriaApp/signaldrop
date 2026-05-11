@@ -39,19 +39,18 @@ echo "[1/6] Regenerating Xcode project from project.yml..."
 xcodegen generate --quiet
 echo "  done"
 
-# Step 2: archive (Release config, universal arm64 + x86_64)
-echo "[2/6] Archiving (universal arm64 + x86_64)..."
-rm -rf "$ARCHIVE_PATH"
+# Step 2: archive — ReleaseDirect config (no sandbox, no APPSTORE flag,
+# Sparkle compiled in, Developer ID signed)
+echo "[2/6] Archiving ReleaseDirect (universal arm64 + x86_64)..."
+mv "$ARCHIVE_PATH" "$ARCHIVE_PATH.old.$(date +%s)" 2>/dev/null || true
 xcodebuild archive \
     -project "$PROJECT" \
     -scheme "$SCHEME" \
-    -configuration Release \
+    -configuration ReleaseDirect \
     -archivePath "$ARCHIVE_PATH" \
     -destination 'generic/platform=macOS' \
     ARCHS="arm64 x86_64" \
     ONLY_ACTIVE_ARCH=NO \
-    CODE_SIGN_IDENTITY="Developer ID Application" \
-    CODE_SIGN_STYLE=Automatic \
     DEVELOPMENT_TEAM="$TEAM_ID" \
     -quiet
 [ -d "$ARCHIVE_PATH" ] || { echo "ERROR: archive failed"; exit 1; }
@@ -59,7 +58,7 @@ echo "  Archive: $ARCHIVE_PATH"
 
 # Step 3: export Developer ID-signed .app
 echo "[3/6] Exporting Developer ID .app..."
-rm -rf "$EXPORT_DIR"
+mv "$EXPORT_DIR" "$EXPORT_DIR.old.$(date +%s)" 2>/dev/null || true
 xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportPath "$EXPORT_DIR" \
