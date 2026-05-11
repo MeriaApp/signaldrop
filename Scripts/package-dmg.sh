@@ -76,8 +76,21 @@ xcrun stapler validate "$DMG_PATH"
 
 # Verify the DMG-mounted .app still passes Gatekeeper assessment.
 echo "Verifying Gatekeeper accepts DMG contents..."
-MOUNT=$(hdiutil attach -nobrowse -noverify -noautoopen "$DMG_PATH" | tail -1 | awk '{print $NF}')
+# Parse hdiutil's plist output instead of column-splitting — the volume name
+# contains a space ("SignalDrop 1.0.2"), which broke a previous awk parse.
+MOUNT_PLIST=$(hdiutil attach -nobrowse -noverify -noautoopen -plist "$DMG_PATH")
+MOUNT=$(echo "$MOUNT_PLIST" | python3 -c "
+import plistlib, sys
+plist = plistlib.loads(sys.stdin.buffer.read())
+for entity in plist.get('system-entities', []):
+    mp = entity.get('mount-point')
+    if mp:
+        print(mp)
+        break
+")
+[ -d "$MOUNT" ] || { echo "ERROR: could not determine mount point for $DMG_PATH"; exit 1; }
 trap "hdiutil detach -quiet \"$MOUNT\" 2>/dev/null || true" EXIT
+
 if ! spctl --assess --type execute --verbose=2 "$MOUNT/$APP_NAME.app" 2>&1 | grep -q "accepted"; then
     echo "ERROR: Gatekeeper rejected the mounted .app"
     exit 1
