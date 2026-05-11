@@ -19,6 +19,11 @@ final class MenuBarController {
     private var recentEventItems: [NSMenuItem] = []
     private var reliabilityItems: [NSMenuItem] = []
 
+    // Cached state so the header can be re-rendered from either a WiFi state
+    // change or an active-interface change without re-passing both each time.
+    private var lastWiFiState: WiFiState = .disconnected
+    private var lastActiveNonWifiLabel: String?
+
     #if !APPSTORE
     private var disconnectButton: NSMenuItem!
     private var autoDisconnectToggle: NSMenuItem!
@@ -214,6 +219,19 @@ final class MenuBarController {
     // MARK: - State Updates
 
     func updateWiFiState(_ state: WiFiState) {
+        lastWiFiState = state
+        renderStatus()
+    }
+
+    func updateActiveNonWifiInterface(_ label: String?) {
+        lastActiveNonWifiLabel = label
+        renderStatus()
+    }
+
+    private func renderStatus() {
+        let state = lastWiFiState
+        let nonWifiLabel = lastActiveNonWifiLabel
+
         if state.isConnected, let ssid = state.ssid {
             statusMenuItem.title = "Connected to \(ssid)"
             signalMenuItem.title = "Signal: \(state.signalQuality.rawValue) (\(state.rssi) dBm)"
@@ -231,11 +249,18 @@ final class MenuBarController {
                 accessibilityDescription: "WiFi: \(state.signalQuality.rawValue)"
             )
         } else if !state.isPoweredOn {
-            statusMenuItem.title = "WiFi Off"
+            statusMenuItem.title = nonWifiLabel.map { "WiFi Off — Online via \($0)" } ?? "WiFi Off"
             signalMenuItem.isHidden = true
             statusItem.button?.image = NSImage(
                 systemSymbolName: "antenna.radiowaves.left.and.right.slash",
                 accessibilityDescription: "WiFi Off"
+            )
+        } else if let label = nonWifiLabel {
+            statusMenuItem.title = "Online via \(label) — WiFi idle"
+            signalMenuItem.isHidden = true
+            statusItem.button?.image = NSImage(
+                systemSymbolName: "antenna.radiowaves.left.and.right.slash",
+                accessibilityDescription: "WiFi Idle — Online via \(label)"
             )
         } else {
             statusMenuItem.title = "Disconnected"

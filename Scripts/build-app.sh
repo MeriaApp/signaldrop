@@ -1,125 +1,122 @@
 #!/bin/bash
+# Build, sign, notarize, and staple the SignalDrop Direct-Distribution .app.
+#
+# Single source of truth for the version is project.yml — this script parses
+# MARKETING_VERSION and CURRENT_PROJECT_VERSION from there instead of carrying
+# its own copy.
+#
+# Notarization is HARD-required. If credentials aren't set up the script
+# exits non-zero; we never ship an unstapled bundle.
 set -euo pipefail
 
-# Configuration
+cd "$(cd "$(dirname "$0")/.." && pwd)"
+
 APP_NAME="SignalDrop"
-BUNDLE_ID="com.meria.signaldrop"
-VERSION="1.0.0"
-BUILD_NUMBER="1"
-DEVELOPER_ID="Developer ID Application: JESSE ROBERT MERIA (36D97ZTP6J)"
 TEAM_ID="36D97ZTP6J"
-ENTITLEMENTS="App/SignalDrop-DirectDistribution.entitlements"
-
-# Paths
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="$PROJECT_ROOT/.build/app"
-APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-CONTENTS="$APP_BUNDLE/Contents"
-MACOS="$CONTENTS/MacOS"
-RESOURCES="$CONTENTS/Resources"
-
-cd "$PROJECT_ROOT"
-
-echo "=== Building $APP_NAME v$VERSION ==="
-echo ""
-
-# Step 1: Clean and build
-echo "[1/6] Building binary..."
-swift build -c release 2>&1
-BINARY=".build/release/signaldrop"
-if [ ! -f "$BINARY" ]; then
-    echo "ERROR: Build failed — binary not found."
-    exit 1
-fi
-echo "  Binary: $(du -h "$BINARY" | cut -f1) — $(file "$BINARY" | grep -o 'arm64\|x86_64' | tr '\n' '+')"
-
-# Step 2: Generate icon (if script exists and icon doesn't)
-ICON_PATH="Resources/AppIcon.icns"
-if [ ! -f "$ICON_PATH" ] && [ -f "Scripts/generate-icon.swift" ]; then
-    echo "[2/6] Generating app icon..."
-    swift Scripts/generate-icon.swift 2>&1
-    if [ ! -f "$ICON_PATH" ]; then
-        echo "  WARNING: Icon generation failed. Building without icon."
-    else
-        echo "  Icon: $ICON_PATH"
-    fi
-else
-    echo "[2/6] App icon: $([ -f "$ICON_PATH" ] && echo "found" || echo "not found (skipping)")"
-fi
-
-# Step 3: Create .app bundle
-echo "[3/6] Creating app bundle..."
-rm -rf "$APP_BUNDLE"
-mkdir -p "$MACOS" "$RESOURCES"
-
-# Copy binary
-cp "$BINARY" "$MACOS/signaldrop"
-chmod +x "$MACOS/signaldrop"
-
-# Copy Info.plist with version injection
-sed -e "s/<string>1.0.0</<string>$VERSION</" \
-    -e "s/<string>1<\/string>/<string>$BUILD_NUMBER<\/string>/" \
-    "App/Info.plist" > "$CONTENTS/Info.plist"
-
-# Copy icon if it exists
-if [ -f "$ICON_PATH" ]; then
-    cp "$ICON_PATH" "$RESOURCES/AppIcon.icns"
-fi
-
-echo "  Bundle: $APP_BUNDLE"
-
-# Step 4: Code sign with Developer ID + hardened runtime
-echo "[4/6] Code signing with Developer ID..."
-codesign --force --deep --options runtime \
-    --sign "$DEVELOPER_ID" \
-    --entitlements "$ENTITLEMENTS" \
-    --timestamp \
-    "$APP_BUNDLE" 2>&1
-
-# Verify signature
-codesign --verify --verbose "$APP_BUNDLE" 2>&1
-echo "  Signed and verified."
-
-# Step 5: Notarize
-echo "[5/6] Notarizing..."
+SCHEME="SignalDrop"
+PROJECT="$APP_NAME.xcodeproj"
 NOTARIZE_PROFILE="${NOTARIZE_PROFILE:-notarytool}"
 
-# Create zip for notarization
-ZIP_PATH="$BUILD_DIR/$APP_NAME.zip"
+# Pull version from project.yml so we can't ship a mismatched DMG.
+VERSION=$(awk -F'"' '/^[[:space:]]*MARKETING_VERSION:/{print $2; exit}' project.yml)
+BUILD=$(awk -F'"' '/^[[:space:]]*CURRENT_PROJECT_VERSION:/{print $2; exit}' project.yml)
+if [ -z "$VERSION" ] || [ -z "$BUILD" ]; then
+    echo "ERROR: could not parse MARKETING_VERSION / CURRENT_PROJECT_VERSION from project.yml"
+    exit 1
+fi
+
+BUILD_DIR=".build/app"
+ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
+EXPORT_DIR="$BUILD_DIR/export"
+APP_BUNDLE="$EXPORT_DIR/$APP_NAME.app"
+ZIP_PATH="$BUILD_DIR/$APP_NAME-$VERSION.zip"
+
+echo "=== Building $APP_NAME v$VERSION ($BUILD) ==="
+echo
+
+# Step 1: regenerate Xcode project from project.yml (single source of truth)
+echo "[1/6] Regenerating Xcode project from project.yml..."
+xcodegen generate --quiet
+echo "  done"
+
+# Step 2: archive (Release config, universal arm64 + x86_64)
+echo "[2/6] Archiving (universal arm64 + x86_64)..."
+rm -rf "$ARCHIVE_PATH"
+xcodebuild archive \
+    -project "$PROJECT" \
+    -scheme "$SCHEME" \
+    -configuration Release \
+    -archivePath "$ARCHIVE_PATH" \
+    -destination 'generic/platform=macOS' \
+    ARCHS="arm64 x86_64" \
+    ONLY_ACTIVE_ARCH=NO \
+    CODE_SIGN_IDENTITY="Developer ID Application" \
+    CODE_SIGN_STYLE=Automatic \
+    DEVELOPMENT_TEAM="$TEAM_ID" \
+    -quiet
+[ -d "$ARCHIVE_PATH" ] || { echo "ERROR: archive failed"; exit 1; }
+echo "  Archive: $ARCHIVE_PATH"
+
+# Step 3: export Developer ID-signed .app
+echo "[3/6] Exporting Developer ID .app..."
+rm -rf "$EXPORT_DIR"
+xcodebuild -exportArchive \
+    -archivePath "$ARCHIVE_PATH" \
+    -exportPath "$EXPORT_DIR" \
+    -exportOptionsPlist ExportOptions-DirectDistribution.plist \
+    -quiet
+[ -d "$APP_BUNDLE" ] || { echo "ERROR: export failed"; exit 1; }
+
+ARCHS_OUT=$(lipo -archs "$APP_BUNDLE/Contents/MacOS/$APP_NAME" 2>/dev/null || echo "?")
+echo "  App: $APP_BUNDLE"
+echo "  Arches: $ARCHS_OUT"
+if [[ "$ARCHS_OUT" != *"arm64"* ]] || [[ "$ARCHS_OUT" != *"x86_64"* ]]; then
+    echo "ERROR: binary is not universal (got '$ARCHS_OUT')"
+    exit 1
+fi
+
+# Step 4: notarize (HARD-required — no silent fallback)
+echo "[4/6] Notarizing..."
+mkdir -p "$BUILD_DIR"
+rm -f "$ZIP_PATH"
 ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 
-if xcrun notarytool submit "$ZIP_PATH" \
-    --keychain-profile "$NOTARIZE_PROFILE" \
-    --wait 2>&1; then
-    echo "  Notarization succeeded."
-
-    # Step 6: Staple
-    echo "[6/6] Stapling notarization ticket..."
-    xcrun stapler staple "$APP_BUNDLE" 2>&1
-    echo "  Stapled."
-else
-    echo ""
-    echo "  WARNING: Notarization failed or credentials not configured."
-    echo "  The app is signed but not notarized."
-    echo ""
-    echo "  To set up notarization credentials:"
-    echo "    xcrun notarytool store-credentials notarytool \\"
+if ! xcrun notarytool submit "$ZIP_PATH" \
+        --keychain-profile "$NOTARIZE_PROFILE" \
+        --wait; then
+    echo
+    echo "ERROR: notarization failed. Apps without notarization tickets will"
+    echo "trigger a Gatekeeper warning. Refusing to ship."
+    echo
+    echo "  First-time setup:"
+    echo "    xcrun notarytool store-credentials $NOTARIZE_PROFILE \\"
     echo "      --apple-id YOUR_APPLE_ID \\"
     echo "      --team-id $TEAM_ID \\"
     echo "      --password YOUR_APP_SPECIFIC_PASSWORD"
-    echo ""
-    echo "  Then re-run this script."
+    rm -f "$ZIP_PATH"
+    exit 1
 fi
-
-# Cleanup
 rm -f "$ZIP_PATH"
 
-echo ""
+# Step 5: staple the ticket onto the bundle
+echo "[5/6] Stapling notarization ticket..."
+xcrun stapler staple "$APP_BUNDLE"
+xcrun stapler validate "$APP_BUNDLE"
+echo "  Stapled and validated."
+
+# Step 6: Gatekeeper assessment — exactly what a real user's Mac would do
+echo "[6/6] Gatekeeper assessment..."
+if ! spctl --assess --type execute --verbose=2 "$APP_BUNDLE" 2>&1 | grep -q "accepted"; then
+    echo "ERROR: Gatekeeper rejected the bundle"
+    exit 1
+fi
+echo "  accepted"
+
+echo
 echo "=== Build complete ==="
 echo "  App:     $APP_BUNDLE"
+echo "  Version: $VERSION ($BUILD)"
+echo "  Arches:  $ARCHS_OUT"
 echo "  Size:    $(du -sh "$APP_BUNDLE" | cut -f1)"
-echo ""
-echo "Next steps:"
-echo "  • Test: open \"$APP_BUNDLE\""
-echo "  • Package: ./Scripts/package-dmg.sh"
-echo "  • Install: cp -R \"$APP_BUNDLE\" /Applications/"
+echo
+echo "Next: ./Scripts/package-dmg.sh"

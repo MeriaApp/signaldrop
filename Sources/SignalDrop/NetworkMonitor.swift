@@ -6,24 +6,36 @@ final class NetworkMonitor {
     private let queue = DispatchQueue(label: "com.signaldrop.network")
 
     private(set) var isInternetReachable = true
-    private(set) var interfaceType: NWInterface.InterfaceType = .wifi
+    /// Non-nil when the satisfied path is NOT routed over WiFi — i.e. Bluetooth
+    /// tether, USB Personal Hotspot, Ethernet, or cellular. Used so the menu
+    /// header can distinguish "Connected to <SSID>" from "Online via Tether
+    /// while WiFi is off." Nil whenever the active path uses WiFi or the path
+    /// is unsatisfied.
+    private(set) var activeNonWifiLabel: String?
 
     var onInternetStatusChanged: ((Bool) -> Void)?
+    var onActiveInterfaceChanged: ((String?) -> Void)?
 
     func start() {
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
             let reachable = path.status == .satisfied
-            let wasReachable = self.isInternetReachable
-            self.isInternetReachable = reachable
+            let label = Self.nonWifiLabel(for: path)
 
-            if let wifi = path.availableInterfaces.first(where: { $0.type == .wifi }) {
-                self.interfaceType = wifi.type
-            }
+            let wasReachable = self.isInternetReachable
+            let prevLabel = self.activeNonWifiLabel
+
+            self.isInternetReachable = reachable
+            self.activeNonWifiLabel = label
 
             if reachable != wasReachable {
                 DispatchQueue.main.async {
                     self.onInternetStatusChanged?(reachable)
+                }
+            }
+            if label != prevLabel {
+                DispatchQueue.main.async {
+                    self.onActiveInterfaceChanged?(label)
                 }
             }
         }
@@ -32,5 +44,15 @@ final class NetworkMonitor {
 
     func stop() {
         monitor.cancel()
+    }
+
+    private static func nonWifiLabel(for path: NWPath) -> String? {
+        guard path.status == .satisfied else { return nil }
+        if path.usesInterfaceType(.wifi) { return nil }
+        if path.usesInterfaceType(.cellular) { return "Cellular" }
+        // Bluetooth PAN and USB Personal Hotspot both surface as wiredEthernet.
+        if path.usesInterfaceType(.wiredEthernet) { return "Ethernet or Tether" }
+        if path.usesInterfaceType(.other) { return "Tether" }
+        return "another network"
     }
 }

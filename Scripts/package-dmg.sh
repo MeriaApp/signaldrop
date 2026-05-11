@@ -1,93 +1,93 @@
 #!/bin/bash
+# Package the previously-built SignalDrop .app into a signed, notarized,
+# stapled DMG. Reads the version from project.yml so the DMG name and the
+# bundle inside it never drift.
+#
+# Requires:
+#   - Scripts/build-app.sh to have completed (.build/app/export/SignalDrop.app)
+#   - create-dmg installed (brew install create-dmg)
+#   - notarytool credentials stored under keychain-profile "notarytool"
+#     (override with NOTARIZE_PROFILE env var)
 set -euo pipefail
 
-APP_NAME="SignalDrop"
-VERSION="1.0.0"
+cd "$(cd "$(dirname "$0")/.." && pwd)"
 
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="$PROJECT_ROOT/.build/app"
-APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-DMG_DIR="$BUILD_DIR/dmg"
+APP_NAME="SignalDrop"
+TEAM_ID="36D97ZTP6J"
+DEVELOPER_ID="Developer ID Application: JESSE ROBERT MERIA ($TEAM_ID)"
+NOTARIZE_PROFILE="${NOTARIZE_PROFILE:-notarytool}"
+
+VERSION=$(awk -F'"' '/^[[:space:]]*MARKETING_VERSION:/{print $2; exit}' project.yml)
+[ -n "$VERSION" ] || { echo "ERROR: could not parse MARKETING_VERSION from project.yml"; exit 1; }
+
+BUILD_DIR=".build/app"
+APP_BUNDLE="$BUILD_DIR/export/$APP_NAME.app"
 DMG_PATH="$BUILD_DIR/$APP_NAME-$VERSION.dmg"
 
-cd "$PROJECT_ROOT"
-
 if [ ! -d "$APP_BUNDLE" ]; then
-    echo "ERROR: App bundle not found at $APP_BUNDLE"
-    echo "Run ./Scripts/build-app.sh first."
+    echo "ERROR: $APP_BUNDLE not found — run ./Scripts/build-app.sh first."
+    exit 1
+fi
+
+if ! command -v create-dmg &>/dev/null; then
+    echo "ERROR: create-dmg not installed. Install with: brew install create-dmg"
     exit 1
 fi
 
 echo "=== Packaging $APP_NAME v$VERSION DMG ==="
-
-# Check for create-dmg (brew install create-dmg)
-if command -v create-dmg &>/dev/null; then
-    echo "Using create-dmg for professional DMG..."
-    rm -f "$DMG_PATH"
-
-    create-dmg \
-        --volname "$APP_NAME $VERSION" \
-        --volicon "$APP_BUNDLE/Contents/Resources/AppIcon.icns" \
-        --window-pos 200 120 \
-        --window-size 600 400 \
-        --icon-size 100 \
-        --icon "$APP_NAME.app" 150 185 \
-        --hide-extension "$APP_NAME.app" \
-        --app-drop-link 450 185 \
-        --no-internet-enable \
-        "$DMG_PATH" \
-        "$APP_BUNDLE" 2>&1 || true  # create-dmg exits 2 on success sometimes
-
-    if [ -f "$DMG_PATH" ]; then
-        echo ""
-        echo "=== DMG created ==="
-        echo "  Path: $DMG_PATH"
-        echo "  Size: $(du -h "$DMG_PATH" | cut -f1)"
-        exit 0
-    fi
-
-    echo "create-dmg failed, falling back to hdiutil..."
-fi
-
-# Fallback: basic DMG with hdiutil
-echo "Creating DMG with hdiutil..."
-rm -rf "$DMG_DIR"
-mkdir -p "$DMG_DIR"
-
-# Copy app
-cp -R "$APP_BUNDLE" "$DMG_DIR/"
-
-# Create Applications symlink
-ln -s /Applications "$DMG_DIR/Applications"
-
-# Create DMG
 rm -f "$DMG_PATH"
-hdiutil create -volname "$APP_NAME $VERSION" \
-    -srcfolder "$DMG_DIR" \
-    -ov -format UDZO \
-    "$DMG_PATH" 2>&1
 
-# Sign the DMG
-DEVELOPER_ID="Developer ID Application: JESSE ROBERT MERIA (36D97ZTP6J)"
-codesign --force --sign "$DEVELOPER_ID" "$DMG_PATH" 2>&1 || true
+# 600×400 window, app on the left, /Applications shortcut on the right,
+# hidden bundle extension (so the icon reads "SignalDrop" not "SignalDrop.app"),
+# no internet-enable (deprecated; would warn on launch).
+create-dmg \
+    --volname "$APP_NAME $VERSION" \
+    --volicon "$APP_BUNDLE/Contents/Resources/AppIcon.icns" \
+    --window-pos 200 120 \
+    --window-size 600 400 \
+    --icon-size 128 \
+    --icon "$APP_NAME.app" 150 200 \
+    --hide-extension "$APP_NAME.app" \
+    --app-drop-link 450 200 \
+    --no-internet-enable \
+    --skip-jenkins \
+    "$DMG_PATH" \
+    "$APP_BUNDLE"
 
-# Notarize the DMG
-NOTARIZE_PROFILE="${NOTARIZE_PROFILE:-notarytool}"
-if xcrun notarytool submit "$DMG_PATH" \
-    --keychain-profile "$NOTARIZE_PROFILE" \
-    --wait 2>&1; then
-    xcrun stapler staple "$DMG_PATH" 2>&1
-    echo "  DMG notarized and stapled."
-else
-    echo "  DMG not notarized (credentials not configured)."
+[ -f "$DMG_PATH" ] || { echo "ERROR: DMG creation failed"; exit 1; }
+
+# Sign the DMG itself (Gatekeeper validates the outer DMG too).
+echo "Signing DMG..."
+codesign --force --sign "$DEVELOPER_ID" --timestamp "$DMG_PATH"
+
+# Notarize the DMG — best-in-class apps ship notarized containers, not just
+# notarized .app bundles. Hard-fail if credentials missing.
+echo "Notarizing DMG..."
+if ! xcrun notarytool submit "$DMG_PATH" \
+        --keychain-profile "$NOTARIZE_PROFILE" \
+        --wait; then
+    echo "ERROR: DMG notarization failed."
+    exit 1
 fi
 
-# Cleanup
-rm -rf "$DMG_DIR"
+echo "Stapling notarization ticket to DMG..."
+xcrun stapler staple "$DMG_PATH"
+xcrun stapler validate "$DMG_PATH"
 
-echo ""
-echo "=== DMG created ==="
-echo "  Path: $DMG_PATH"
-echo "  Size: $(du -h "$DMG_PATH" | cut -f1)"
-echo ""
-echo "Ready to distribute."
+# Verify the DMG-mounted .app still passes Gatekeeper assessment.
+echo "Verifying Gatekeeper accepts DMG contents..."
+MOUNT=$(hdiutil attach -nobrowse -noverify -noautoopen "$DMG_PATH" | tail -1 | awk '{print $NF}')
+trap "hdiutil detach -quiet \"$MOUNT\" 2>/dev/null || true" EXIT
+if ! spctl --assess --type execute --verbose=2 "$MOUNT/$APP_NAME.app" 2>&1 | grep -q "accepted"; then
+    echo "ERROR: Gatekeeper rejected the mounted .app"
+    exit 1
+fi
+echo "  accepted"
+
+echo
+echo "=== DMG complete ==="
+echo "  Path:    $DMG_PATH"
+echo "  Size:    $(du -h "$DMG_PATH" | cut -f1)"
+echo "  Version: $VERSION"
+echo
+echo "Upload to GitHub Releases and update the Sparkle appcast."

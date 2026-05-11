@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.0.2 — 2026-05-11
+
+Fixes a stale-status bug where the menu header could keep showing
+"Connected to <SSID>" hours after the connection actually changed,
+plus a complete first-launch onboarding redesign.
+
+### WiFi monitoring
+
+- Restart CoreWLAN event monitoring on system wake. `CWWiFiClient`
+  delegate callbacks can go silent across sleep/wake and never recover
+  on their own; SignalDrop now re-registers all monitored events from
+  `NSWorkspace.didWakeNotification`.
+- Self-heal the status header from the 30 s periodic refresh by
+  re-reading `currentState()` every tick instead of relying purely on
+  delegate events.
+- Require both `powerOn()` and a non-nil `ssid()` before reporting
+  "connected" — guards against stale SSID strings while the radio is
+  logically off.
+- Detect non-WiFi internet paths via `NWPathMonitor` and render
+  "WiFi Off — Online via Tether" / "Online via Ethernet" instead of
+  silently showing a stale SSID when the active path bypasses WiFi.
+
+### First-launch experience
+
+- Replaced the legacy `NSAlert` welcome with a proper SwiftUI
+  onboarding window (welcome → location → notifications → done) so
+  the two permission prompts no longer race each other at startup.
+- Onboarding includes a "Skip" path and explicit "Open System
+  Settings" affordances for re-granting denied permissions.
+
+### Build + distribution
+
+- Universal binary (arm64 + x86_64) for Release builds — Intel Mac
+  users can now run SignalDrop.
+- About dialog reads version + build from `Info.plist` dynamically.
+- `build-app.sh` and `package-dmg.sh` now read the version from
+  `project.yml` (single source of truth) and hard-fail on missing
+  notarization credentials. Both scripts run a `spctl --assess` check
+  before declaring success.
+- `uninstall.sh` now correctly removes the `signaldrop` binary and
+  the `/Applications/SignalDrop.app` bundle (previous version
+  referenced a stale `dropout` binary name).
+
 ## 1.0.0 — 2026-03-26
 
 Initial release.

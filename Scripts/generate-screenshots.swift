@@ -7,7 +7,7 @@ import Foundation
 
 let W: CGFloat = 2880
 let H: CGFloat = 1800
-let OUTPUT_DIR = "/Users/jesse/Developer/dropout/Screenshots"
+let OUTPUT_DIR = "/Users/jesse/Developer/signaldrop/Screenshots"
 
 // Colors
 let BG_TOP = NSColor(red: 0x1e/255.0, green: 0x29/255.0, blue: 0x3b/255.0, alpha: 1)
@@ -128,7 +128,7 @@ func menuCard(x: CGFloat, topY: CGFloat, w: CGFloat, h: CGFloat) {
 func menuHeader(cx: CGFloat, cty: CGFloat, cw: CGFloat, status: String, sColor: NSColor) {
     let pad: CGFloat = 52
     let hty = cty + 30
-    text("Dropout", x: cx + pad, topY: hty, font: bold(44), color: WHITE)
+    text("SignalDrop", x: cx + pad, topY: hty, font: bold(44), color: WHITE)
 
     let dotSz: CGFloat = 18
     let sFont = med(32)
@@ -178,7 +178,7 @@ func notifBanner(x: CGFloat, topY: CGFloat, w: CGFloat, h: CGFloat, title: Strin
     let tx = x + pad + iSz + 28
     text(title, x: tx, topY: topY + h/2 - 34, font: semi(36), color: WHITE)
     text(body, x: tx, topY: topY + h/2 + 10, font: reg(28), color: MED)
-    text("DROPOUT", x: x + w - pad - 140, topY: topY + 16, font: med(21), color: DIM)
+    text("SIGNALDROP", x: x + w - pad - 140, topY: topY + 16, font: med(21), color: DIM)
 }
 
 // MARK: - Bitmap
@@ -325,7 +325,7 @@ func ss4() -> NSBitmapImageRep {
         let pw = cw - 120
         var ry: CGFloat = cty + 40
 
-        text("Dropout -- Network Report", x: px, topY: ry, font: bold(40), color: WHITE)
+        text("SignalDrop -- Network Report", x: px, topY: ry, font: bold(40), color: WHITE)
         ry += 52
         text("Generated Mar 26, 2026 at 2:14 PM", x: px, topY: ry, font: reg(28), color: DIM)
         ry += 56
@@ -396,7 +396,7 @@ func ss5() -> NSBitmapImageRep {
         glow(cx: W/2, cy: 800, radius: 1200, color: RED)
 
         textCenter("Dead Network\nDetection", topY: 80, font: heavy(128), color: WHITE, maxW: 2400)
-        textCenter("Auto-disconnects from WiFi with no internet", topY: 370, font: reg(50), color: GRAY_SUB, maxW: 2000)
+        textCenter("Alerts you when WiFi is connected but has no internet", topY: 370, font: reg(50), color: GRAY_SUB, maxW: 2200)
 
         let cw: CGFloat = 1100
         let ch: CGFloat = 860
@@ -411,9 +411,9 @@ func ss5() -> NSBitmapImageRep {
             Row(label: "Network", value: "HomeWiFi-5G", valueColor: WHITE),
             Row(label: "Internet", value: "No Connectivity", valueColor: RED),
             Row(label: "Signal", value: "Strong (-42 dBm)", valueColor: GREEN),
-            Row(label: "Action", value: "Auto-Disconnected", valueColor: ORANGE, valueFont: semi(32)),
+            Row(label: "Action", value: "Open WiFi Settings", valueColor: ORANGE, valueFont: semi(32)),
             Row(label: "Reason", value: "DNS + HTTP checks failed", valueColor: MED),
-            Row(label: "Status", value: "Scanning for networks...", valueColor: BLUE),
+            Row(label: "Status", value: "Tap to switch networks", valueColor: BLUE),
         ], startTopY: cty + 112, x: px, w: pw, rowH: 78)
 
         // Custom notification
@@ -432,9 +432,9 @@ func ss5() -> NSBitmapImageRep {
         text("X", x: bx + pad + (iSz - its.width)/2, topY: bty + (bh - its.height)/2, font: iFont, color: RED)
 
         let tx = bx + pad + iSz + 28
-        text("Dead Network -- Switching", x: tx, topY: bty + bh/2 - 36, font: semi(34), color: WHITE)
-        text("HomeWiFi has no internet. Disconnected to find better.", x: tx, topY: bty + bh/2 + 10, font: reg(26), color: MED)
-        text("DROPOUT", x: bx + bw - pad - 140, topY: bty + 18, font: med(21), color: DIM)
+        text("Dead Network Detected", x: tx, topY: bty + bh/2 - 36, font: semi(34), color: WHITE)
+        text("HomeWiFi-5G is connected but has no internet.", x: tx, topY: bty + bh/2 + 10, font: reg(26), color: MED)
+        text("SIGNALDROP", x: bx + bw - pad - 200, topY: bty + 18, font: med(21), color: DIM)
     }
 }
 

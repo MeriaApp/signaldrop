@@ -1,0 +1,288 @@
+import SwiftUI
+
+struct OnboardingView: View {
+    enum Step: Hashable {
+        case welcome
+        case location
+        case notifications
+        case done
+    }
+
+    @State private var step: Step = .welcome
+    @State private var locationResult: PermissionResult?
+    @State private var notificationsResult: PermissionResult?
+    @State private var isAwaitingPermission = false
+
+    let requestLocation: (@escaping (PermissionResult) -> Void) -> Void
+    let requestNotifications: (@escaping (PermissionResult) -> Void) -> Void
+    let openSettings: (OnboardingController.PermissionKind) -> Void
+    let onFinish: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content
+                .padding(.horizontal, 40)
+                .padding(.top, 36)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            footer
+                .padding(.horizontal, 32)
+                .padding(.bottom, 24)
+        }
+        .frame(width: 520, height: 420)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    // MARK: - Step content
+
+    @ViewBuilder
+    private var content: some View {
+        switch step {
+        case .welcome:   welcomeStep
+        case .location:  locationStep
+        case .notifications: notificationsStep
+        case .done:      doneStep
+        }
+    }
+
+    private var welcomeStep: some View {
+        VStack(spacing: 18) {
+            appIcon
+            VStack(spacing: 8) {
+                Text("Welcome to SignalDrop")
+                    .font(.system(size: 22, weight: .semibold))
+                Text("macOS silently drops your WiFi and hopes you notice.\nSignalDrop tells you the moment it happens.")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                bullet("Instant disconnect notifications with downtime duration")
+                bullet("Signal-weakness warnings before drops happen")
+                bullet("Daily reliability stats and CSV export for ISP support")
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var locationStep: some View {
+        permissionStep(
+            symbol: "location.circle.fill",
+            tint: .blue,
+            title: "Allow location access",
+            body: "Apple requires location permission for any app that reads WiFi network names — even though SignalDrop never uses your location for anything else.\n\nYour location is never stored, sent anywhere, or shared.",
+            actionLabel: locationResult == .denied ? "Open System Settings" : "Allow",
+            isComplete: locationResult == .granted,
+            isDenied: locationResult == .denied,
+            action: {
+                if locationResult == .denied {
+                    openSettings(.location)
+                } else {
+                    isAwaitingPermission = true
+                    requestLocation { result in
+                        locationResult = result
+                        isAwaitingPermission = false
+                    }
+                }
+            }
+        )
+    }
+
+    private var notificationsStep: some View {
+        permissionStep(
+            symbol: "bell.badge.circle.fill",
+            tint: .orange,
+            title: "Allow notifications",
+            body: "SignalDrop alerts you the moment your connection changes — disconnects, weak signal, internet outages. Without this, the app still works but can only show events in the menu.",
+            actionLabel: notificationsResult == .denied ? "Open System Settings" : "Enable",
+            isComplete: notificationsResult == .granted,
+            isDenied: notificationsResult == .denied,
+            action: {
+                if notificationsResult == .denied {
+                    openSettings(.notifications)
+                } else {
+                    isAwaitingPermission = true
+                    requestNotifications { result in
+                        notificationsResult = result
+                        isAwaitingPermission = false
+                    }
+                }
+            }
+        )
+    }
+
+    private var doneStep: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.15))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "checkmark.circle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 56, height: 56)
+                    .foregroundColor(.green)
+            }
+            VStack(spacing: 6) {
+                Text("You're set")
+                    .font(.system(size: 22, weight: .semibold))
+                Text("SignalDrop is now monitoring your WiFi from the menu bar.")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                tip("Click the WiFi-arc icon in your menu bar for live status.")
+                tip("Open Preferences from the menu to toggle Launch at Login.")
+                tip("Use Generate ISP Report to export downtime data for support chats.")
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    // MARK: - Reusable bits
+
+    private func permissionStep(
+        symbol: String,
+        tint: Color,
+        title: String,
+        body: String,
+        actionLabel: String,
+        isComplete: Bool,
+        isDenied: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle().fill(tint.opacity(0.12)).frame(width: 72, height: 72)
+                Image(systemName: symbol)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 44, height: 44)
+                    .foregroundColor(tint)
+            }
+            Text(title)
+                .font(.system(size: 20, weight: .semibold))
+            Text(body)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 420)
+
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    if isComplete {
+                        Image(systemName: "checkmark")
+                        Text("Granted")
+                    } else {
+                        Text(actionLabel)
+                    }
+                }
+                .frame(minWidth: 140)
+            }
+            .controlSize(.large)
+            .keyboardShortcut(.defaultAction)
+            .disabled(isComplete || isAwaitingPermission)
+
+            if isDenied {
+                Text("You can change this any time in System Settings → Privacy & Security.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var appIcon: some View {
+        Group {
+            if let img = NSImage(named: "AppIcon") {
+                Image(nsImage: img).resizable().scaledToFit()
+            } else {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .resizable().scaledToFit()
+                    .foregroundColor(.accentColor)
+            }
+        }
+        .frame(width: 84, height: 84)
+    }
+
+    private func bullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func tip(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "circle.fill")
+                .resizable()
+                .frame(width: 4, height: 4)
+                .padding(.top, 6)
+                .foregroundColor(.secondary)
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Footer / nav
+
+    private var footer: some View {
+        HStack {
+            stepIndicator
+            Spacer()
+            primaryButton
+        }
+    }
+
+    private var stepIndicator: some View {
+        HStack(spacing: 6) {
+            ForEach([Step.welcome, .location, .notifications, .done], id: \.self) { s in
+                Circle()
+                    .fill(s == step ? Color.accentColor : Color.secondary.opacity(0.3))
+                    .frame(width: 6, height: 6)
+            }
+        }
+    }
+
+    private var primaryButton: some View {
+        Button(action: advance) {
+            Text(primaryLabel).frame(minWidth: 90)
+        }
+        .controlSize(.large)
+        .keyboardShortcut(.return)
+        .disabled(isPrimaryDisabled)
+    }
+
+    private var primaryLabel: String {
+        switch step {
+        case .welcome:        return "Continue"
+        case .location:       return locationResult == .granted ? "Continue" : "Skip"
+        case .notifications:  return notificationsResult == .granted ? "Continue" : "Skip"
+        case .done:           return "Get Started"
+        }
+    }
+
+    private var isPrimaryDisabled: Bool {
+        isAwaitingPermission
+    }
+
+    private func advance() {
+        switch step {
+        case .welcome:        step = .location
+        case .location:       step = .notifications
+        case .notifications:  step = .done
+        case .done:           onFinish()
+        }
+    }
+}

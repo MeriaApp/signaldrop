@@ -1,65 +1,60 @@
 #!/bin/bash
+# Developer convenience: build a SignalDrop .app and install it the way a
+# real user would — drag-to-Applications, then launch. Login-at-startup is
+# the app's responsibility via SMAppService (toggle from the menu).
+#
+# This is NOT the user-facing distribution path — for that, ship the DMG
+# produced by Scripts/build-app.sh + Scripts/package-dmg.sh.
 set -euo pipefail
+
+cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 APP_NAME="SignalDrop"
 BUNDLE_ID="com.meria.signaldrop"
-INSTALL_DIR="$HOME/Library/Application Support/SignalDrop"
-LAUNCH_AGENT="$HOME/Library/LaunchAgents/$BUNDLE_ID.plist"
-BINARY="$INSTALL_DIR/signaldrop"
+DEST="/Applications/$APP_NAME.app"
+LEGACY_LAUNCH_AGENT="$HOME/Library/LaunchAgents/$BUNDLE_ID.plist"
+LEGACY_INSTALL_DIR="$HOME/Library/Application Support/$APP_NAME"
 
-echo "Building SignalDrop..."
-cd "$(dirname "$0")/.."
-swift build -c release 2>&1
+echo "Building $APP_NAME (Release via Xcode)..."
+xcodegen generate --quiet
+xcodebuild \
+    -project "$APP_NAME.xcodeproj" \
+    -scheme "$APP_NAME" \
+    -configuration Release \
+    -destination 'platform=macOS' \
+    -derivedDataPath ".build/derived" \
+    -quiet \
+    build
 
-BUILT_BINARY=".build/release/signaldrop"
-if [ ! -f "$BUILT_BINARY" ]; then
-    echo "Build failed."
-    exit 1
+BUILT="$(find .build/derived/Build/Products/Release -maxdepth 1 -name "$APP_NAME.app" -type d | head -1)"
+[ -n "$BUILT" ] && [ -d "$BUILT" ] || { echo "ERROR: build failed — $APP_NAME.app not produced"; exit 1; }
+
+echo "Stopping any running instance..."
+pkill -f "$APP_NAME.app/Contents/MacOS/$APP_NAME" 2>/dev/null || true
+sleep 1
+
+# Clean up legacy LaunchAgent / Application Support binary from older
+# install.sh versions so they don't keep relaunching a stale build.
+if [ -f "$LEGACY_LAUNCH_AGENT" ]; then
+    echo "Removing legacy LaunchAgent..."
+    launchctl bootout "gui/$(id -u)/$BUNDLE_ID" 2>/dev/null || true
+    rm -f "$LEGACY_LAUNCH_AGENT"
+fi
+if [ -f "$LEGACY_INSTALL_DIR/signaldrop" ]; then
+    echo "Removing legacy binary at $LEGACY_INSTALL_DIR/signaldrop..."
+    rm -f "$LEGACY_INSTALL_DIR/signaldrop" "$LEGACY_INSTALL_DIR/signaldrop.log"
 fi
 
-echo "Installing to $INSTALL_DIR..."
-mkdir -p "$INSTALL_DIR"
-cp "$BUILT_BINARY" "$BINARY"
-chmod +x "$BINARY"
+echo "Installing to $DEST..."
+rm -rf "$DEST"
+cp -R "$BUILT" "$DEST"
 
-# Create LaunchAgent for auto-start
-echo "Creating LaunchAgent..."
-cat > "$LAUNCH_AGENT" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$BUNDLE_ID</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$BINARY</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <dict>
-        <key>Crashed</key>
-        <true/>
-    </dict>
-    <key>ProcessType</key>
-    <string>Interactive</string>
-    <key>StandardErrorPath</key>
-    <string>$INSTALL_DIR/signaldrop.log</string>
-</dict>
-</plist>
-EOF
+echo "Launching..."
+open "$DEST"
 
-# Load the agent
-echo "Starting SignalDrop..."
-launchctl bootout "gui/$(id -u)/$BUNDLE_ID" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT"
-
-echo ""
-echo "SignalDrop installed and running."
-echo "  Binary: $BINARY"
-echo "  Agent:  $LAUNCH_AGENT"
-echo "  Log:    $INSTALL_DIR/signaldrop.log"
-echo "  Data:   $INSTALL_DIR/events.db"
-echo ""
-echo "Look for the WiFi icon in your menu bar."
+echo
+echo "$APP_NAME installed."
+echo "  App:  $DEST"
+echo "  Data: $LEGACY_INSTALL_DIR/events.db"
+echo
+echo "Enable 'Launch at Login' from the $APP_NAME menu to start on boot."

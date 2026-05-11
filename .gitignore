@@ -6,6 +6,7 @@ DerivedData/
 
 # Screenshots from hook + manual captures
 screenshots/
+test-artifacts/
 
 # Build artifacts
 build/

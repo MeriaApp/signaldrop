@@ -7,6 +7,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     private let eventLog = EventLog()
     private let menuBar = MenuBarController()
     private let locationManager = LocationManager()
+    private let onboarding = OnboardingController()
     private lazy var connectionQuality = ConnectionQuality(eventLog: eventLog)
     private lazy var ispReport = ISPReport(eventLog: eventLog, connectionQuality: connectionQuality)
     private lazy var ispReceipt = ISPReceipt(eventLog: eventLog, connectionQuality: connectionQuality)
@@ -47,21 +48,32 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerDefaults()
 
-        // First launch onboarding
-        let isFirstLaunch = !UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
-        if isFirstLaunch {
-            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
-            showWelcome()
-        }
-
-        // Location Services (required for SSID on macOS 14+)
+        // Location Services (required for SSID on macOS 14+).
+        // The onboarding window does the first-launch prompt; this callback
+        // refreshes the menu when the user grants permission later via
+        // System Settings.
         locationManager.onAuthorizationChanged = { [weak self] authorized in
             if authorized {
                 let state = self?.wifiMonitor.currentState()
                 if let state { self?.menuBar.updateWiFiState(state) }
             }
         }
-        locationManager.requestAuthorization()
+
+        // First launch: show the SwiftUI onboarding window and let it
+        // sequence the location → notifications prompts. On returning
+        // launches we skip the window and silently re-read the status.
+        let isFirstLaunch = !UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
+        if isFirstLaunch {
+            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+            onboarding.onComplete = { [weak self] in
+                self?.notificationService.refreshAuthorizationStatus()
+            }
+            onboarding.show()
+        } else {
+            // Returning user — no prompts; if location was previously
+            // denied, the menu will show "Disconnected" until they fix it.
+            locationManager.requestAuthorization()
+        }
 
         // Menu bar
         menuBar.setup()
@@ -114,6 +126,18 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
                 self.handleEvent(event)
             }
         }
+        networkMonitor.onActiveInterfaceChanged = { [weak self] label in
+            self?.menuBar.updateActiveNonWifiInterface(label)
+        }
+
+        // Restart CoreWLAN event monitoring after the Mac wakes — CWWiFiClient
+        // delegates can go silent across sleep and stay silent forever otherwise.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(systemDidWake(_:)),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
 
         // Start
         wifiMonitor.start()
@@ -121,6 +145,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
 
         // Initial state
         menuBar.updateInternetStatus(reachable: networkMonitor.isInternetReachable)
+        menuBar.updateActiveNonWifiInterface(networkMonitor.activeNonWifiLabel)
         refreshUI()
 
         // Periodic refresh (30s for stats, events, and connection quality)
@@ -130,9 +155,14 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         wifiMonitor.stop()
         networkMonitor.stop()
         refreshTimer?.invalidate()
+    }
+
+    @objc private func systemDidWake(_ notification: Notification) {
+        wifiMonitor.restartMonitoring()
     }
 
     // MARK: - Event Handling
@@ -339,6 +369,10 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     // MARK: - UI Refresh
 
     private func refreshUI() {
+        // Self-heal: re-read CoreWLAN every tick so the status header can't
+        // sit stale if delegate events go silent (e.g. across sleep/wake).
+        menuBar.updateWiFiState(wifiMonitor.currentState())
+
         let events = eventLog.recentEvents(limit: 8)
         menuBar.updateRecentEvents(events)
 
@@ -392,10 +426,14 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     // MARK: - About
 
     private func showAbout() {
+        let info = Bundle.main.infoDictionary
+        let marketing = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+
         let alert = NSAlert()
         alert.messageText = "SignalDrop"
         alert.informativeText = """
-            Version 1.0.1
+            Version \(marketing) (\(build))
 
             Event-driven WiFi disconnect notifier for macOS.
             Uses CoreWLAN — the OS pushes events the instant something \
@@ -405,36 +443,6 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             """
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
-
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
-        NSApp.setActivationPolicy(.accessory)
-    }
-
-    // MARK: - Welcome
-
-    private func showWelcome() {
-        let alert = NSAlert()
-        alert.messageText = "Welcome to SignalDrop"
-        alert.informativeText = """
-            SignalDrop monitors your WiFi and notifies you the instant \
-            your connection drops — something macOS should do but doesn't.
-
-            You'll be asked to grant two permissions:
-
-            \u{2022} Notifications — so SignalDrop can alert you
-            \u{2022} Location — required by macOS to read WiFi network names \
-            (your location is never stored or sent anywhere)
-
-            Tip: Since SignalDrop replaces Apple's WiFi icon, you can hide \
-            the built-in one in System Settings \u{2192} Control Center \
-            \u{2192} WiFi \u{2192} "Don't Show in Menu Bar."
-
-            Look for the WiFi icon in your menu bar.
-            """
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Get Started")
 
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)

@@ -52,6 +52,14 @@ final class WiFiMonitor: NSObject {
     private let signalRecoveryThreshold = -65 // dBm — hysteresis to avoid flapping
     private var signalDegraded = false
 
+    private let monitoredEvents: [CWEventType] = [
+        .linkDidChange,
+        .ssidDidChange,
+        .bssidDidChange,
+        .linkQualityDidChange,
+        .powerDidChange,
+    ]
+
     // Callbacks
     var onEvent: ((WiFiEvent) -> Void)?
     var onStateChanged: ((WiFiState) -> Void)?
@@ -60,22 +68,7 @@ final class WiFiMonitor: NSObject {
 
     func start() {
         client.delegate = self
-
-        let events: [CWEventType] = [
-            .linkDidChange,
-            .ssidDidChange,
-            .bssidDidChange,
-            .linkQualityDidChange,
-            .powerDidChange,
-        ]
-
-        for event in events {
-            do {
-                try client.startMonitoringEvent(with: event)
-            } catch {
-                print("signaldrop: failed to monitor \(event): \(error)")
-            }
-        }
+        installEventMonitors()
 
         // Capture initial state
         let state = currentState()
@@ -83,6 +76,20 @@ final class WiFiMonitor: NSObject {
         previousSSID = state.ssid
         previousRSSI = state.rssi
         onStateChanged?(state)
+    }
+
+    /// Re-register CoreWLAN event monitoring. CWWiFiClient delegates can stop
+    /// firing across sleep/wake and never recover on their own — call this from
+    /// NSWorkspace.didWakeNotification to bring them back.
+    func restartMonitoring() {
+        do {
+            try client.stopMonitoringAllEvents()
+        } catch {
+            print("signaldrop: stop-all failed during restart: \(error)")
+        }
+        client.delegate = self
+        installEventMonitors()
+        onStateChanged?(currentState())
     }
 
     func stop() {
@@ -98,14 +105,30 @@ final class WiFiMonitor: NSObject {
             return .disconnected
         }
 
+        let powerOn = iface.powerOn()
+        let ssid = iface.ssid()
+        // `isConnected` requires BOTH a powered-on radio AND a non-nil SSID.
+        // `ssid()` can return a stale or friendly-name string after the radio
+        // is logically off, which would otherwise show "Connected to <SSID>"
+        // when the user is actually offline or routed over a non-WiFi path.
         return WiFiState(
-            ssid: iface.ssid(),
+            ssid: ssid,
             bssid: iface.bssid(),
             rssi: iface.rssiValue(),
             transmitRate: iface.transmitRate(),
-            isConnected: iface.ssid() != nil,
-            isPoweredOn: iface.powerOn()
+            isConnected: powerOn && ssid != nil,
+            isPoweredOn: powerOn
         )
+    }
+
+    private func installEventMonitors() {
+        for event in monitoredEvents {
+            do {
+                try client.startMonitoringEvent(with: event)
+            } catch {
+                print("signaldrop: failed to monitor \(event): \(error)")
+            }
+        }
     }
 
     #if !APPSTORE
