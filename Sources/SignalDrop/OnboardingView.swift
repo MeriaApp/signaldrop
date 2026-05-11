@@ -114,32 +114,60 @@ struct OnboardingView: View {
     }
 
     private var doneStep: some View {
-        VStack(spacing: 18) {
+        // Detect a "crippled" state: user reached Done without granting
+        // anything. Surface that honestly instead of a green checkmark
+        // that contradicts reality.
+        let locationOK = locationResult == .granted
+        let notificationsOK = notificationsResult == .granted
+        let bothMissing = !locationOK && !notificationsOK
+        let someMissing = !locationOK || !notificationsOK
+        let tint: Color = bothMissing ? .orange : (someMissing ? .yellow : .green)
+        let symbol = bothMissing ? "exclamationmark.triangle.fill"
+            : (someMissing ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+        let title = bothMissing ? "Permissions skipped"
+            : (someMissing ? "Almost there" : "You\u{2019}re set")
+        let subtitle: String = {
+            if bothMissing {
+                return "SignalDrop will still launch, but without Location it can\u{2019}t read network names, and without Notifications you won\u{2019}t see alerts. Grant either later from System Settings."
+            } else if !locationOK {
+                return "Notifications are on, but without Location, SignalDrop can\u{2019}t read network names. Grant Location later from System Settings."
+            } else if !notificationsOK {
+                return "Network names will show, but you won\u{2019}t get alerts. Grant Notifications later from System Settings."
+            } else {
+                return "SignalDrop is now monitoring your WiFi from the menu bar."
+            }
+        }()
+
+        return VStack(spacing: 18) {
             ZStack {
                 Circle()
-                    .fill(Color.green.opacity(0.15))
+                    .fill(tint.opacity(0.15))
                     .frame(width: 72, height: 72)
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: symbol)
                     .resizable()
                     .scaledToFit()
                     .frame(width: 56, height: 56)
-                    .foregroundColor(.green)
+                    .foregroundColor(tint)
             }
             VStack(spacing: 6) {
-                Text("You're set")
+                Text(title)
                     .font(.system(size: 22, weight: .semibold))
-                Text("SignalDrop is now monitoring your WiFi from the menu bar.")
+                Text(subtitle)
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
+                    .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 440)
             }
-            VStack(alignment: .leading, spacing: 8) {
-                tip("Click the WiFi-arc icon in your menu bar for live status.")
-                tip("Open Preferences from the menu to toggle Launch at Login.")
-                tip("Use Generate ISP Report to export downtime data for support chats.")
+            if !someMissing {
+                VStack(alignment: .leading, spacing: 8) {
+                    tip("Click the WiFi-arc icon in your menu bar for live status.")
+                    tip("Toggle Launch at Login from the menu to start on boot.")
+                    tip("Use Generate ISP Report to export downtime data for support chats.")
+                }
+                .padding(.top, 4)
             }
-            .padding(.top, 4)
         }
     }
 

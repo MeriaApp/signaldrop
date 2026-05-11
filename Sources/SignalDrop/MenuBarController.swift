@@ -23,6 +23,11 @@ final class MenuBarController {
     // change or an active-interface change without re-passing both each time.
     private var lastWiFiState: WiFiState = .disconnected
     private var lastActiveNonWifiLabel: String?
+    private var lastLocationAuthorized: Bool = true
+    private var lastNotificationsAuthorized: Bool = true
+
+    private var grantLocationMenuItem: NSMenuItem?
+    private var notificationsDisabledMenuItem: NSMenuItem?
 
     #if !APPSTORE
     private var disconnectButton: NSMenuItem!
@@ -34,6 +39,9 @@ final class MenuBarController {
     var onExportReport: (() -> Void)?
     var onCopyReceipt: (() -> Void)?
     var onShowAbout: (() -> Void)?
+    var onShowWelcome: (() -> Void)?
+    var onOpenLocationSettings: (() -> Void)?
+    var onOpenNotificationSettings: (() -> Void)?
     var onQuit: (() -> Void)?
 
     #if !APPSTORE
@@ -72,6 +80,26 @@ final class MenuBarController {
         qualityMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         qualityMenuItem.isEnabled = false
         menu.addItem(qualityMenuItem)
+
+        // Hint items — only visible when the matching permission is denied.
+        grantLocationMenuItem = NSMenuItem(
+            title: "Grant Location Access\u{2026}",
+            action: #selector(openLocationSettingsAction(_:)),
+            keyEquivalent: ""
+        )
+        grantLocationMenuItem?.target = self
+        grantLocationMenuItem?.isHidden = true
+        menu.addItem(grantLocationMenuItem!)
+
+        notificationsDisabledMenuItem = NSMenuItem(
+            title: "Notifications disabled — events won\u{2019}t alert",
+            action: #selector(openLocationSettingsAction(_:)),  // wired below to notifications path
+            keyEquivalent: ""
+        )
+        notificationsDisabledMenuItem?.target = self
+        notificationsDisabledMenuItem?.isHidden = true
+        notificationsDisabledMenuItem?.action = #selector(openNotificationSettingsAction(_:))
+        menu.addItem(notificationsDisabledMenuItem!)
 
         #if !APPSTORE
         disconnectButton = NSMenuItem(
@@ -207,6 +235,14 @@ final class MenuBarController {
         menu.addItem(checkForUpdatesItem)
         #endif
 
+        let welcomeItem = NSMenuItem(
+            title: "Show Welcome\u{2026}",
+            action: #selector(showWelcomeAction(_:)),
+            keyEquivalent: ""
+        )
+        welcomeItem.target = self
+        menu.addItem(welcomeItem)
+
         let aboutItem = NSMenuItem(
             title: "About SignalDrop",
             action: #selector(showAboutAction(_:)),
@@ -239,9 +275,30 @@ final class MenuBarController {
         renderStatus()
     }
 
+    func updateLocationAuthorized(_ authorized: Bool) {
+        lastLocationAuthorized = authorized
+        renderStatus()
+    }
+
+    func updateNotificationsAuthorized(_ authorized: Bool) {
+        lastNotificationsAuthorized = authorized
+        renderStatus()
+    }
+
     private func renderStatus() {
         let state = lastWiFiState
         let nonWifiLabel = lastActiveNonWifiLabel
+
+        // When the radio is on and the path is satisfied via WiFi but
+        // ssid() is nil AND Location is denied, we're in the "Apple won't
+        // tell us the network name" state — surface it explicitly rather
+        // than falsely showing "Disconnected."
+        let locationGatedNameless = state.isPoweredOn
+            && state.ssid == nil
+            && nonWifiLabel == nil
+            && !lastLocationAuthorized
+
+        renderPermissionHints(locationGatedNameless: locationGatedNameless)
 
         if state.isConnected, let ssid = state.ssid {
             statusMenuItem.title = "Connected to \(ssid)"
@@ -258,6 +315,20 @@ final class MenuBarController {
             statusItem.button?.image = NSImage(
                 systemSymbolName: iconName,
                 accessibilityDescription: "WiFi: \(state.signalQuality.rawValue)"
+            )
+        } else if locationGatedNameless {
+            statusMenuItem.title = "WiFi on — network name hidden"
+            // We have RSSI even without Location; show it so the user
+            // sees the app is reading SOMETHING and the header isn't a lie.
+            if state.rssi != 0 {
+                signalMenuItem.title = "Signal: \(state.signalQuality.rawValue) (\(state.rssi) dBm)"
+                signalMenuItem.isHidden = false
+            } else {
+                signalMenuItem.isHidden = true
+            }
+            statusItem.button?.image = NSImage(
+                systemSymbolName: "lock.icloud",
+                accessibilityDescription: "WiFi on — Location permission needed for network name"
             )
         } else if !state.isPoweredOn {
             statusMenuItem.title = nonWifiLabel.map { "WiFi Off — Online via \($0)" } ?? "WiFi Off"
@@ -408,6 +479,29 @@ final class MenuBarController {
 
     @objc private func showAboutAction(_ sender: NSMenuItem) {
         onShowAbout?()
+    }
+
+    @objc private func showWelcomeAction(_ sender: NSMenuItem) {
+        onShowWelcome?()
+    }
+
+    @objc private func openLocationSettingsAction(_ sender: NSMenuItem) {
+        onOpenLocationSettings?()
+    }
+
+    @objc private func openNotificationSettingsAction(_ sender: NSMenuItem) {
+        onOpenNotificationSettings?()
+    }
+
+    private func renderPermissionHints(locationGatedNameless: Bool) {
+        grantLocationMenuItem?.isHidden = !locationGatedNameless
+        // Surface a notifications-denied hint ONLY when the user has the
+        // feature enabled in our prefs but the system denied the perm —
+        // otherwise it's just noise.
+        let signalWarningsOn = UserDefaults.standard.bool(forKey: "signalWarningsEnabled")
+        let soundOn = UserDefaults.standard.bool(forKey: "soundEnabled")
+        let userExpectsAlerts = signalWarningsOn || soundOn
+        notificationsDisabledMenuItem?.isHidden = !(userExpectsAlerts && !lastNotificationsAuthorized)
     }
 
     @objc private func quit(_ sender: NSMenuItem) {

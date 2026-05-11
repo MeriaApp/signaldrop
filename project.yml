@@ -118,3 +118,8 @@ targets:
       - sdk: CoreWLAN.framework
       - sdk: SystemConfiguration.framework
       - package: Sparkle
+    postCompileScripts:
+      - name: Strip Sparkle from App Store build
+        script: ./Scripts/strip-sparkle-for-appstore.sh
+        runOnlyWhenInstalling: false
+        showEnvVars: false

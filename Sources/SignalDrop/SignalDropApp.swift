@@ -1,4 +1,5 @@
 import AppKit
+import UserNotifications
 
 final class SignalDropApp: NSObject, NSApplicationDelegate {
     private let wifiMonitor = WiFiMonitor()
@@ -51,13 +52,13 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
 
         // Location Services (required for SSID on macOS 14+).
         // The onboarding window does the first-launch prompt; this callback
-        // refreshes the menu when the user grants permission later via
-        // System Settings.
+        // refreshes the menu when the user grants or revokes permission
+        // later via System Settings.
         locationManager.onAuthorizationChanged = { [weak self] authorized in
-            if authorized {
-                let state = self?.wifiMonitor.currentState()
-                if let state { self?.menuBar.updateWiFiState(state) }
-            }
+            guard let self else { return }
+            self.menuBar.updateLocationAuthorized(authorized)
+            let state = self.wifiMonitor.currentState()
+            self.menuBar.updateWiFiState(state)
         }
 
         // First launch: show the SwiftUI onboarding window and let it
@@ -83,6 +84,17 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         menuBar.onCopyReceipt = { [weak self] in self?.copyReceiptToClipboard() }
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.onShowAbout = { [weak self] in self?.showAbout() }
+        menuBar.onShowWelcome = { [weak self] in self?.showOnboardingAgain() }
+        menuBar.onOpenLocationSettings = {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        menuBar.onOpenNotificationSettings = {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+                NSWorkspace.shared.open(url)
+            }
+        }
 
         #if !APPSTORE
         menuBar.onOpenHooksFolder = { [weak self] in self?.openHooksFolder() }
@@ -148,6 +160,8 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         // Initial state
         menuBar.updateInternetStatus(reachable: networkMonitor.isInternetReachable)
         menuBar.updateActiveNonWifiInterface(networkMonitor.activeNonWifiLabel)
+        menuBar.updateLocationAuthorized(locationManager.isAuthorized)
+        refreshNotificationsAuthorization()
         refreshUI()
 
         // Periodic refresh (30s for stats, events, and connection quality)
@@ -450,6 +464,31 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
         NSApp.setActivationPolicy(.accessory)
+    }
+
+    // MARK: - Onboarding (user-triggered)
+
+    private func showOnboardingAgain() {
+        onboarding.onComplete = { [weak self] in
+            guard let self else { return }
+            self.menuBar.updateLocationAuthorized(self.locationManager.isAuthorized)
+            self.refreshNotificationsAuthorization()
+            self.notificationService.refreshAuthorizationStatus()
+        }
+        onboarding.show()
+    }
+
+    /// Asks UNUserNotificationCenter for current authorization and propagates
+    /// the result to the menu without prompting the user. Used at startup and
+    /// after onboarding completes so the menu reflects reality.
+    private func refreshNotificationsAuthorization() {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            let authorized = settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+            DispatchQueue.main.async {
+                self?.menuBar.updateNotificationsAuthorized(authorized)
+            }
+        }
     }
 
     // MARK: - Defaults
