@@ -64,6 +64,19 @@ final class WiFiMonitor: NSObject {
     var onEvent: ((WiFiEvent) -> Void)?
     var onStateChanged: ((WiFiState) -> Void)?
 
+    /// Always dispatch state-change callbacks to main. CoreWLAN delegate
+    /// methods don't guarantee main-thread invocation, and downstream
+    /// consumers (MenuBarController.renderStatus) touch AppKit.
+    private func emitStateChanged(_ state: WiFiState) {
+        if Thread.isMainThread {
+            onStateChanged?(state)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.onStateChanged?(state)
+            }
+        }
+    }
+
     // MARK: - Lifecycle
 
     func start() {
@@ -75,7 +88,7 @@ final class WiFiMonitor: NSObject {
         wasConnected = state.isConnected
         previousSSID = state.ssid
         previousRSSI = state.rssi
-        onStateChanged?(state)
+        emitStateChanged(state)
     }
 
     /// Re-register CoreWLAN event monitoring. CWWiFiClient delegates can stop
@@ -89,7 +102,7 @@ final class WiFiMonitor: NSObject {
         }
         client.delegate = self
         installEventMonitors()
-        onStateChanged?(currentState())
+        emitStateChanged(currentState())
     }
 
     func stop() {
@@ -192,7 +205,7 @@ extension WiFiMonitor: CWEventDelegate {
 
         wasConnected = isConnected
         previousSSID = state.ssid
-        onStateChanged?(state)
+        emitStateChanged(state)
     }
 
     func ssidDidChangeForWiFiInterface(withName interfaceName: String) {
@@ -210,13 +223,13 @@ extension WiFiMonitor: CWEventDelegate {
         }
 
         previousSSID = newSSID
-        onStateChanged?(state)
+        emitStateChanged(state)
     }
 
     func bssidDidChangeForWiFiInterface(withName interfaceName: String) {
         // BSSID changes (roaming) — update state silently
         let state = currentState()
-        onStateChanged?(state)
+        emitStateChanged(state)
     }
 
     func linkQualityDidChangeForWiFiInterface(
@@ -246,7 +259,7 @@ extension WiFiMonitor: CWEventDelegate {
         }
 
         previousRSSI = rssi
-        onStateChanged?(state)
+        emitStateChanged(state)
     }
 
     // MARK: - Helpers
@@ -280,6 +293,6 @@ extension WiFiMonitor {
             type: state.isPoweredOn ? .powerOn : .powerOff
         )
         emit(event)
-        onStateChanged?(state)
+        emitStateChanged(state)
     }
 }

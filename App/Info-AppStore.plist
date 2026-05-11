@@ -44,13 +44,5 @@
 	<string>SignalDrop needs location access to display your WiFi network name. Your location is never stored or sent anywhere.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUEnableInstallerLauncherService</key>
-	<true/>
-	<key>SUFeedURL</key>
-	<string>https://jessemeria.com/signaldrop/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>2udxMzvjniZyxXxJ3ZBK1Coglm9KQsuvon3nqaD3XWI=</string>
 </dict>
 </plist>

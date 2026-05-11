@@ -9,11 +9,12 @@ options:
 
 # Build configurations:
 #   - Debug:          Local development; sandbox on, APPSTORE flag on.
-#   - Release:        Mac App Store submission. Sandbox on, APPSTORE flag on,
-#                     Sparkle code paths compiled out. Universal binary.
-#   - ReleaseDirect:  Direct Distribution (DMG). No sandbox, no APPSTORE flag,
-#                     Sparkle auto-update active. Universal binary, Developer-ID
-#                     signed.
+#   - Release:        Mac App Store submission (target SignalDrop only).
+#                     Sandbox on, APPSTORE flag on, Sparkle is NOT linked
+#                     or embedded — clean App Store bundle.
+#   - ReleaseDirect:  Direct Distribution (DMG, target SignalDropDirect
+#                     only). No sandbox, no APPSTORE flag, Sparkle
+#                     linked + embedded.
 configs:
   Debug: debug
   Release: release
@@ -22,7 +23,6 @@ configs:
 settings:
   base:
     DEVELOPMENT_TEAM: 36D97ZTP6J
-    CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "1.0.2"
     CURRENT_PROJECT_VERSION: "5"
   configs:
@@ -33,8 +33,6 @@ settings:
       CODE_SIGN_IDENTITY: "Apple Development"
       CODE_SIGN_STYLE: Automatic
     ReleaseDirect:
-      # Direct-Distribution build uses Developer ID, signed manually.
-      # build-app.sh overrides via xcodebuild flags for archive-time signing.
       CODE_SIGN_IDENTITY: "Developer ID Application"
       CODE_SIGN_STYLE: Manual
       PROVISIONING_PROFILE_SPECIFIER: ""
@@ -44,8 +42,13 @@ packages:
     url: https://github.com/sparkle-project/Sparkle
     from: "2.7.0"
 
-targets:
-  SignalDrop:
+# Shared base for both targets. They differ only in:
+#   - Sparkle dependency (SignalDropDirect only)
+#   - Entitlements (App Store sandbox vs Direct)
+#   - Info.plist additions (SU* keys on Direct)
+#   - Code-sign identity (handled at config level above)
+targetTemplates:
+  AppBase:
     type: application
     platform: macOS
     sources:
@@ -55,8 +58,41 @@ targets:
       - path: Resources/AppIcon.icns
         type: file
         buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.meria.signaldrop
+        PRODUCT_NAME: SignalDrop
+        COMBINE_HIDPI_IMAGES: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+        ENABLE_HARDENED_RUNTIME: true
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG APPSTORE"
+          ONLY_ACTIVE_ARCH: YES
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "APPSTORE"
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          ARCHS: "arm64 x86_64"
+          ONLY_ACTIVE_ARCH: NO
+        ReleaseDirect:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          ARCHS: "arm64 x86_64"
+          ONLY_ACTIVE_ARCH: NO
+    dependencies:
+      - sdk: CoreWLAN.framework
+      - sdk: SystemConfiguration.framework
+
+targets:
+
+  # Mac App Store target.
+  # No Sparkle dependency — sandboxed App Store apps don't self-update
+  # (Apple handles updates), so linking Sparkle would just be bundle
+  # bloat and a potential 2.4.5(viii) review risk.
+  SignalDrop:
+    templates: [AppBase]
     info:
-      path: App/Info.plist
+      path: App/Info-AppStore.plist
       properties:
         CFBundleIdentifier: com.meria.signaldrop
         CFBundleName: SignalDrop
@@ -79,47 +115,94 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleInfoDictionaryVersion: "6.0"
         LSApplicationCategoryType: public.app-category.utilities
-        # Sparkle — only used in ReleaseDirect (Direct Distribution) builds.
-        # The App Store build never invokes Sparkle (gated by APPSTORE flag);
-        # leaving these keys present is harmless dead data.
-        SUFeedURL: https://jessemeria.com/signaldrop/appcast.xml
-        SUPublicEDKey: "2udxMzvjniZyxXxJ3ZBK1Coglm9KQsuvon3nqaD3XWI="
-        SUEnableInstallerLauncherService: true
-        SUEnableAutomaticChecks: true
+    entitlements:
+      path: App/SignalDrop.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.personal-information.location: true
+        com.apple.developer.networking.wifi-info: true
+        com.apple.security.files.user-selected.read-write: true
     settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.meria.signaldrop
-        PRODUCT_NAME: SignalDrop
-        COMBINE_HIDPI_IMAGES: true
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
-        ENABLE_HARDENED_RUNTIME: true
       configs:
         Debug:
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG APPSTORE"
-          ONLY_ACTIVE_ARCH: YES
           CODE_SIGN_ENTITLEMENTS: App/SignalDrop.entitlements
         Release:
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "APPSTORE"
-          SWIFT_OPTIMIZATION_LEVEL: "-O"
-          # Universal binary for direct distribution + Mac App Store. Apple
-          # promotes universal apps in App Store search ranking and Intel-Mac
-          # users would otherwise see "Only works on Apple Silicon."
-          ARCHS: "arm64 x86_64"
-          ONLY_ACTIVE_ARCH: NO
           CODE_SIGN_ENTITLEMENTS: App/SignalDrop.entitlements
+
+  # Direct Distribution target (DMG with Sparkle auto-update).
+  # Unsandboxed, Developer-ID signed, links Sparkle and embeds the
+  # framework. UpdaterService.swift / "Check for Updates..." menu item
+  # are only compiled into THIS target's binary (gated by !APPSTORE
+  # in source).
+  SignalDropDirect:
+    templates: [AppBase]
+    info:
+      path: App/Info-DirectDist.plist
+      properties:
+        CFBundleIdentifier: com.meria.signaldrop
+        CFBundleName: SignalDrop
+        CFBundleDisplayName: SignalDrop
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundlePackageType: APPL
+        CFBundleExecutable: SignalDrop
+        CFBundleIconFile: AppIcon
+        CFBundleIconName: AppIcon
+        LSUIElement: true
+        LSMinimumSystemVersion: "13.0"
+        NSHighResolutionCapable: true
+        NSSupportsAutomaticGraphicsSwitching: true
+        NSLocationUsageDescription: "SignalDrop needs location access to display your WiFi network name. Your location is never stored or sent anywhere."
+        NSLocationWhenInUseUsageDescription: "SignalDrop needs location access to display your WiFi network name. Your location is never stored or sent anywhere."
+        NSHumanReadableCopyright: "Copyright © 2026 Jesse Meria. MIT License."
+        CFBundleSupportedPlatforms:
+          - MacOSX
+        CFBundleDevelopmentRegion: en
+        CFBundleInfoDictionaryVersion: "6.0"
+        LSApplicationCategoryType: public.app-category.utilities
+        # Sparkle keys — only present in the Direct Distribution build.
+        SUFeedURL: https://jessemeria.com/signaldrop/appcast.xml
+        SUPublicEDKey: "2udxMzvjniZyxXxJ3ZBK1Coglm9KQsuvon3nqaD3XWI="
+        SUEnableAutomaticChecks: true
+    entitlements:
+      path: App/SignalDrop-DirectDistribution.entitlements
+      properties:
+        com.apple.security.personal-information.location: true
+        com.apple.security.automation.apple-events: true
+    settings:
+      configs:
         ReleaseDirect:
-          # No APPSTORE flag → Sparkle code compiles in.
-          SWIFT_OPTIMIZATION_LEVEL: "-O"
-          ARCHS: "arm64 x86_64"
-          ONLY_ACTIVE_ARCH: NO
           CODE_SIGN_ENTITLEMENTS: App/SignalDrop-DirectDistribution.entitlements
     dependencies:
-      - sdk: CoreWLAN.framework
-      - sdk: SystemConfiguration.framework
       - package: Sparkle
-    postCompileScripts:
-      - name: Strip Sparkle from App Store build
-        script: ./Scripts/strip-sparkle-for-appstore.sh
-        runOnlyWhenInstalling: false
-        showEnvVars: false
+
+schemes:
+  SignalDrop:
+    build:
+      targets:
+        SignalDrop: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  SignalDropDirect:
+    build:
+      targets:
+        SignalDropDirect: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: ReleaseDirect
+    analyze:
+      config: Debug
+    archive:
+      config: ReleaseDirect

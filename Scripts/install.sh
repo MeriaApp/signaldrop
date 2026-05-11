@@ -15,18 +15,18 @@ DEST="/Applications/$APP_NAME.app"
 LEGACY_LAUNCH_AGENT="$HOME/Library/LaunchAgents/$BUNDLE_ID.plist"
 LEGACY_INSTALL_DIR="$HOME/Library/Application Support/$APP_NAME"
 
-echo "Building $APP_NAME (Release via Xcode)..."
+echo "Building $APP_NAME (ReleaseDirect via Xcode — full feature set + Sparkle)..."
 xcodegen generate --quiet
 xcodebuild \
     -project "$APP_NAME.xcodeproj" \
-    -scheme "$APP_NAME" \
-    -configuration Release \
+    -scheme "SignalDropDirect" \
+    -configuration ReleaseDirect \
     -destination 'platform=macOS' \
     -derivedDataPath ".build/derived" \
     -quiet \
     build
 
-BUILT="$(find .build/derived/Build/Products/Release -maxdepth 1 -name "$APP_NAME.app" -type d | head -1)"
+BUILT="$(find .build/derived/Build/Products/ReleaseDirect -maxdepth 1 -name "$APP_NAME.app" -type d | head -1)"
 [ -n "$BUILT" ] && [ -d "$BUILT" ] || { echo "ERROR: build failed — $APP_NAME.app not produced"; exit 1; }
 
 echo "Stopping any running instance..."

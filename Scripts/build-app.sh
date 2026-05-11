@@ -13,7 +13,9 @@ cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 APP_NAME="SignalDrop"
 TEAM_ID="36D97ZTP6J"
-SCHEME="SignalDrop"
+# Direct-Distribution scheme — separate from the App Store target so the
+# DMG binary links Sparkle and the App Store binary doesn't.
+SCHEME="SignalDropDirect"
 PROJECT="$APP_NAME.xcodeproj"
 NOTARIZE_PROFILE="${NOTARIZE_PROFILE:-notarytool}"
 
