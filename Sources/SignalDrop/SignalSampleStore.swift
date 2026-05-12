@@ -31,14 +31,20 @@ final class SignalSampleStore {
     /// Fires on the main thread whenever a new sample is appended.
     var onSampleAdded: ((SignalSample) -> Void)?
 
-    /// - Parameter capacity: how many samples to retain. 300 @ 1 Hz = 5 minutes
-    ///   of history visible in the live graph.
+    /// - Parameter capacity: how many samples to retain. 3600 @ 1 Hz = 1
+    ///   hour of history — enough to back the 1m/5m/15m/1h time-range
+    ///   presets in `SignalGraphPane` without resizing the buffer when
+    ///   the user changes window. Memory: ~150 KB at the full hour.
     /// - Parameter sampleInterval: seconds between samples. 1.0 gives a
     ///   smooth-looking line graph without burning CPU; 0.5 is also fine.
-    init(capacity: Int = 300, sampleInterval: TimeInterval = 1.0) {
+    init(capacity: Int = 3600, sampleInterval: TimeInterval = 1.0) {
         self.capacity = capacity
         self.sampleInterval = sampleInterval
     }
+
+    /// True if sampling is currently active. Used by the pause/play
+    /// toolbar control in `SignalGraphPane`.
+    var isSampling: Bool { timer != nil }
 
     /// All retained samples, oldest first. Safe to read from main thread.
     var allSamples: [SignalSample] { samples }

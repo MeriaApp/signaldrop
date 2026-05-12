@@ -83,12 +83,71 @@ struct NetworkInsightsView: View {
 
 private struct NearbyNetworksList: View {
     @ObservedObject var model: NetworkInsightsModel
+    /// Sort order applied to the visible rows. Defaults to "strongest
+    /// signal first" — same as the scanner already emits — but the user
+    /// can click any column header to re-sort.
+    @State private var sortOrder: [KeyPathComparator<ScannedNetwork>] = [
+        .init(\.rssi, order: .reverse),
+    ]
+    /// Band filter for the toolbar Picker. `all` shows everything; the
+    /// other cases restrict to a single 802.11 spectrum band so dense
+    /// cafe / office scans can be reduced to just the modern bands.
+    @State private var bandFilter: BandFilter = .all
+
+    enum BandFilter: String, CaseIterable, Identifiable {
+        case all = "All bands"
+        case g24 = "2.4 GHz"
+        case g5  = "5 GHz"
+        case g6  = "6 GHz"
+        var id: String { rawValue }
+
+        func matches(_ band: ScannedNetwork.ChannelBand) -> Bool {
+            switch self {
+            case .all: return true
+            case .g24: return band == .band2_4GHz
+            case .g5:  return band == .band5GHz
+            case .g6:  return band == .band6GHz
+            }
+        }
+    }
+
+    private var visibleNetworks: [ScannedNetwork] {
+        model.networks
+            .filter { bandFilter.matches($0.channelBand) }
+            .sorted(using: sortOrder)
+    }
 
     var body: some View {
         if model.networks.isEmpty {
             EmptyScanState(model: model)
         } else {
-            Table(model.networks) {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Picker("", selection: $bandFilter) {
+                        ForEach(BandFilter.allCases) { f in
+                            Text(f.rawValue).tag(f)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(width: 130)
+                    .accessibilityLabel("Filter by frequency band")
+                    Text("\(visibleNetworks.count) of \(model.networks.count) networks")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                tableBody
+                LastUpdatedFooter(scope: .scanner(at: model.lastScanCompletedAt, isScanning: model.isScanning))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tableBody: some View {
+        Table(visibleNetworks, sortOrder: $sortOrder) {
                 TableColumn("Network") { net in
                     let isConnected = net.ssid != nil && net.ssid == model.connectedSSID
                     HStack(spacing: 8) {
@@ -121,7 +180,7 @@ private struct NearbyNetworksList: View {
                 }
                 .width(min: 240, ideal: 320)
 
-                TableColumn("Signal") { net in
+                TableColumn("Signal", value: \.rssi) { net in
                     VStack(alignment: .leading, spacing: 1) {
                         Text("\(net.rssi) dBm")
                             .font(.system(size: 12, design: .monospaced))
@@ -138,7 +197,7 @@ private struct NearbyNetworksList: View {
                 }
                 .width(min: 60, ideal: 70)
 
-                TableColumn("Channel") { net in
+                TableColumn("Channel", value: \.channel) { net in
                     Text("\(net.channel) · \(net.channelWidth) MHz")
                         .font(.system(size: 12, design: .monospaced))
                 }
@@ -156,7 +215,6 @@ private struct NearbyNetworksList: View {
                 .width(min: 90, ideal: 120)
             }
             .padding(.horizontal, 8)
-        }
     }
 }
 
@@ -222,6 +280,60 @@ private struct ConnectedPill: View {
     }
 }
 
+/// Footer strip pinned to the bottom of each Network Insights tab.
+/// Surfaces "when did we last refresh?" so the user can tell at a
+/// glance whether the data is live, stale, or paused. Auto-ticks every
+/// second via `TimelineView` so the relative timestamp stays current
+/// without requiring the parent to manage a refresh timer.
+struct LastUpdatedFooter: View {
+    enum Scope {
+        case scanner(at: Date?, isScanning: Bool)
+        case graph(latest: Date?, isPaused: Bool)
+        case history(at: Date)
+    }
+    let scope: Scope
+
+    var body: some View {
+        TimelineView(.periodic(from: Date(), by: 1.0)) { ctx in
+            HStack {
+                Spacer()
+                Text(label(now: ctx.date))
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func label(now: Date) -> String {
+        switch scope {
+        case .scanner(let at, let isScanning):
+            if isScanning { return "Scanning…" }
+            return at.map { "Last scan \(relativeSuffix(from: $0, now: now))" } ?? "No scan yet"
+        case .graph(let latest, let isPaused):
+            if isPaused { return "Paused" }
+            return latest.map { "Updated \(relativeSuffix(from: $0, now: now))" } ?? "Waiting for first sample"
+        case .history(let at):
+            return "Updated \(relativeSuffix(from: at, now: now))"
+        }
+    }
+
+    /// Human-friendly relative time phrase, already including the "ago"
+    /// suffix where appropriate. "just now" stands alone; "2s" / "5m"
+    /// get "ago" appended. Capped at minutes so a stale value reads as
+    /// "2m ago" rather than "2:18 ago".
+    private func relativeSuffix(from date: Date, now: Date) -> String {
+        let s = Int(now.timeIntervalSince(date))
+        if s < 2 { return "just now" }
+        if s < 60 { return "\(s)s ago" }
+        let m = s / 60
+        if m < 60 { return "\(m)m ago" }
+        let h = m / 60
+        return "\(h)h ago"
+    }
+}
+
 private struct SignalBars: View {
     let rssi: Int
     var body: some View {
@@ -261,10 +373,32 @@ private struct SignalGraphPane: View {
     @ObservedObject var model: NetworkInsightsModel
     @State private var visibleSeries: Set<String> = ["RSSI", "Noise"]
     @State private var hoverSample: SignalSample?
+    /// Visible time-window preset (§3.20). The sampling buffer holds
+    /// the full hour at 1 Hz; this state controls how much of it the
+    /// chart renders. `oneHour` shows everything; tighter ranges zoom
+    /// in on recent activity.
+    @State private var timeRange: TimeRange = .fiveMinutes
+
+    enum TimeRange: String, CaseIterable, Identifiable {
+        case oneMinute    = "1m"
+        case fiveMinutes  = "5m"
+        case fifteenMin   = "15m"
+        case oneHour      = "1h"
+
+        var id: String { rawValue }
+        var seconds: TimeInterval {
+            switch self {
+            case .oneMinute:   return 60
+            case .fiveMinutes: return 300
+            case .fifteenMin:  return 900
+            case .oneHour:     return 3600
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Legend / toggles
+            // Legend / toggles + toolbar
             HStack(spacing: 16) {
                 ForEach(["RSSI", "Noise", "TX rate"], id: \.self) { name in
                     Button {
@@ -285,8 +419,26 @@ private struct SignalGraphPane: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(name) series toggle")
                 }
                 Spacer()
+                Picker("", selection: $timeRange) {
+                    ForEach(TimeRange.allCases) { r in
+                        Text(r.rawValue).tag(r)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 200)
+                .accessibilityLabel("Time range")
+                Button {
+                    model.toggleGraphPaused()
+                } label: {
+                    Image(systemName: model.isGraphPaused ? "play.fill" : "pause.fill")
+                }
+                .buttonStyle(.borderless)
+                .help(model.isGraphPaused ? "Resume sampling" : "Pause sampling")
+                .accessibilityLabel(model.isGraphPaused ? "Resume signal graph sampling" : "Pause signal graph sampling")
                 if let ssid = model.connectedSSID {
                     Text(ssid)
                         .font(.system(size: 11))
@@ -312,6 +464,10 @@ private struct SignalGraphPane: View {
                     .padding(.leading, 36)
                     .padding(.trailing, 16)
                     .padding(.vertical, 16)
+                LastUpdatedFooter(scope: .graph(
+                    latest: model.samples.last?.timestamp,
+                    isPaused: model.isGraphPaused
+                ))
             }
         }
     }
@@ -343,7 +499,7 @@ private struct SignalGraphPane: View {
         let domain = yDomain
         Chart {
             if visibleSeries.contains("RSSI") {
-                ForEach(model.samples) { s in
+                ForEach(visibleSamples) { s in
                     LineMark(
                         x: .value("Time", s.timestamp),
                         y: .value("dBm", s.rssi),
@@ -354,7 +510,7 @@ private struct SignalGraphPane: View {
                 }
             }
             if visibleSeries.contains("Noise") {
-                ForEach(model.samples) { s in
+                ForEach(visibleSamples) { s in
                     LineMark(
                         x: .value("Time", s.timestamp),
                         y: .value("dBm", s.noise),
@@ -448,7 +604,7 @@ private struct SignalGraphPane: View {
     private func txRateChart(xDomain: ClosedRange<Date>) -> some View {
         let txDomain = txRateDomain
         Chart {
-            ForEach(model.samples) { s in
+            ForEach(visibleSamples) { s in
                 LineMark(
                     x: .value("Time", s.timestamp),
                     y: .value("Mbps", s.transmitRate),
@@ -499,17 +655,23 @@ private struct SignalGraphPane: View {
     }
 
     /// Shared X-axis time domain so the dBm and TX-rate charts line up
-    /// column-for-column. Width is the full sample window the store has
-    /// buffered; falls back to "last 5 minutes ending now" when samples
-    /// are missing on either end (typical at first launch).
+    /// column-for-column. Width = `timeRange.seconds` ending at the most
+    /// recent sample (or `now` when paused / freshly opened). The
+    /// underlying sample buffer holds an hour; this just controls how
+    /// far back the chart renders.
     private var sharedXDomain: ClosedRange<Date> {
-        if let first = model.samples.first?.timestamp,
-           let last = model.samples.last?.timestamp,
-           first < last {
-            return first ... last
-        }
-        let now = Date()
-        return now.addingTimeInterval(-300) ... now
+        let end = model.samples.last?.timestamp ?? Date()
+        let start = end.addingTimeInterval(-timeRange.seconds)
+        return start ... end
+    }
+
+    /// Samples that fall inside the current time-range window. Used to
+    /// scope both the line marks AND the autoscale computation —
+    /// otherwise a low RSSI outlier from 45 minutes ago would still
+    /// stretch the Y axis when the user is looking at the last minute.
+    private var visibleSamples: [SignalSample] {
+        let domain = sharedXDomain
+        return model.samples.filter { domain.contains($0.timestamp) }
     }
 
     /// TX-rate Y-axis domain. Floor at 0 (Mbps can't be negative), pad
@@ -517,7 +679,7 @@ private struct SignalGraphPane: View {
     /// upper bound to a clean round number (50 / 100 / 200 / 500 / 1000)
     /// so the tick labels read as natural Wi-Fi link rates.
     private var txRateDomain: ClosedRange<Double> {
-        let maxRate = model.samples.map(\.transmitRate).max() ?? 0
+        let maxRate = visibleSamples.map(\.transmitRate).max() ?? 0
         guard maxRate > 0 else { return 0 ... 100 }
         let padded = maxRate * 1.1
         let rounded: Double
@@ -543,17 +705,18 @@ private struct SignalGraphPane: View {
     /// rounds to nearest 10 dBm for clean tick marks. Falls back to the
     /// classic -100..-20 range when there's no data to read.
     private var yDomain: ClosedRange<Int> {
-        guard !model.samples.isEmpty else { return -100 ... -20 }
+        let pool = visibleSamples
+        guard !pool.isEmpty else { return -100 ... -20 }
         var lo = Int.max
         var hi = Int.min
         if visibleSeries.contains("RSSI") {
-            for s in model.samples {
+            for s in pool {
                 if s.rssi < lo { lo = s.rssi }
                 if s.rssi > hi { hi = s.rssi }
             }
         }
         if visibleSeries.contains("Noise") {
-            for s in model.samples {
+            for s in pool {
                 if s.noise < lo { lo = s.noise }
                 if s.noise > hi { hi = s.noise }
             }
@@ -587,12 +750,13 @@ private struct SignalGraphPane: View {
     }
 
     private func sampleNearest(to location: CGPoint, in geo: GeometryProxy, proxy: ChartProxy) -> SignalSample? {
-        guard !model.samples.isEmpty else { return nil }
+        let pool = visibleSamples
+        guard !pool.isEmpty else { return nil }
         let plot = geo[proxy.plotAreaFrame]
         let xInPlot = location.x - plot.origin.x
         guard xInPlot >= 0, xInPlot <= plot.width else { return nil }
         guard let hovered: Date = proxy.value(atX: xInPlot) else { return nil }
-        return model.samples.min(by: { lhs, rhs in
+        return pool.min(by: { lhs, rhs in
             abs(lhs.timestamp.timeIntervalSince(hovered)) < abs(rhs.timestamp.timeIntervalSince(hovered))
         })
     }
@@ -667,6 +831,8 @@ final class NetworkInsightsModel: ObservableObject {
     @Published var connectedSSID: String?
     @Published var isScanning: Bool = false
     @Published var scanError: String?
+    @Published var lastScanCompletedAt: Date?
+    @Published var isGraphPaused: Bool = false
     /// Tab the window opens to and that cross-tab actions (e.g. outage
     /// drill-in's "Show in Signal Graph" button) can mutate. Lifted out
     /// of the view's `@State` so non-view code can flip tabs cleanly.
@@ -686,6 +852,7 @@ final class NetworkInsightsModel: ObservableObject {
             self.networks = self.scanner.lastResults
             self.scanError = self.scanner.lastScanError
             self.isScanning = false
+            self.lastScanCompletedAt = Date()
             // Refresh in case the user roamed networks since the window opened.
             self.connectedSSID = self.getCurrentState().ssid
         }
@@ -706,10 +873,23 @@ final class NetworkInsightsModel: ObservableObject {
 
     func startGraphSampling() {
         sampleStore.start()
+        isGraphPaused = false
         connectedSSID = getCurrentState().ssid
     }
 
     func stopGraphSampling() {
         sampleStore.stop()
+    }
+
+    /// Toggle sampling without tearing down the buffer. Used by the
+    /// pause/play toolbar button in `SignalGraphPane` (§3.19).
+    func toggleGraphPaused() {
+        if isGraphPaused {
+            sampleStore.start()
+            isGraphPaused = false
+        } else {
+            sampleStore.stop()
+            isGraphPaused = true
+        }
     }
 }

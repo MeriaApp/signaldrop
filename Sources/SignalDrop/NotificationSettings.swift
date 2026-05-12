@@ -68,11 +68,18 @@ final class NotificationSettings: ObservableObject {
     /// because those are the critical category.
     @AppStorage("notify.quietHoursEnabled") var quietHoursEnabled: Bool = false
 
-    /// Hour-of-day (0-23) when quiet hours begin.
+    /// Hour-of-day (0-23) when quiet hours begin. Combined with
+    /// `quietHoursStartMinute` for minute-precision support added in v1.1.
     @AppStorage("notify.quietHoursStartHour") var quietHoursStartHour: Int = 22  // 10 PM
+
+    /// Minute-of-hour (0-59) when quiet hours begin.
+    @AppStorage("notify.quietHoursStartMinute") var quietHoursStartMinute: Int = 0
 
     /// Hour-of-day (0-23) when quiet hours end.
     @AppStorage("notify.quietHoursEndHour") var quietHoursEndHour: Int = 7  // 7 AM
+
+    /// Minute-of-hour (0-59) when quiet hours end.
+    @AppStorage("notify.quietHoursEndMinute") var quietHoursEndMinute: Int = 0
 
     // MARK: - Sound
 
@@ -82,15 +89,20 @@ final class NotificationSettings: ObservableObject {
     // MARK: - Helpers
 
     /// True if `now` falls within the user's configured quiet-hours window.
-    /// Handles wrap-around (e.g., 22:00 → 07:00) correctly.
+    /// Handles wrap-around (e.g., 22:30 → 07:15) correctly with
+    /// minute-of-hour precision (added in v1.1).
     func isInQuietHours(now: Date = Date()) -> Bool {
         guard quietHoursEnabled else { return false }
-        let hour = Calendar.current.component(.hour, from: now)
-        if quietHoursStartHour <= quietHoursEndHour {
-            return hour >= quietHoursStartHour && hour < quietHoursEndHour
+        let cal = Calendar.current
+        let nowMinutes = cal.component(.hour, from: now) * 60
+            + cal.component(.minute, from: now)
+        let startMinutes = quietHoursStartHour * 60 + quietHoursStartMinute
+        let endMinutes = quietHoursEndHour * 60 + quietHoursEndMinute
+        if startMinutes <= endMinutes {
+            return nowMinutes >= startMinutes && nowMinutes < endMinutes
         } else {
-            // Wraps across midnight (e.g., 22 → 7)
-            return hour >= quietHoursStartHour || hour < quietHoursEndHour
+            // Wraps across midnight (e.g., 22:30 → 07:15)
+            return nowMinutes >= startMinutes || nowMinutes < endMinutes
         }
     }
 

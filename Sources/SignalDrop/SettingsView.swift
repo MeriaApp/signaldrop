@@ -80,21 +80,21 @@ struct SettingsView: View {
                 if settings.quietHoursEnabled {
                     HStack(spacing: 8) {
                         Text("From")
-                        Picker("", selection: $settings.quietHoursStartHour) {
-                            ForEach(0..<24) { hour in
-                                Text(formatHour(hour)).tag(hour)
-                            }
-                        }
+                        DatePicker(
+                            "",
+                            selection: quietHoursStartBinding,
+                            displayedComponents: .hourAndMinute
+                        )
                         .labelsHidden()
-                        .frame(width: 90)
+                        .datePickerStyle(.compact)
                         Text("to")
-                        Picker("", selection: $settings.quietHoursEndHour) {
-                            ForEach(0..<24) { hour in
-                                Text(formatHour(hour)).tag(hour)
-                            }
-                        }
+                        DatePicker(
+                            "",
+                            selection: quietHoursEndBinding,
+                            displayedComponents: .hourAndMinute
+                        )
                         .labelsHidden()
-                        .frame(width: 90)
+                        .datePickerStyle(.compact)
                         Spacer()
                     }
                     Text("Non-critical notifications are suppressed during this window. Disconnects and internet-lost still fire because they're the events you actually need to act on.")
@@ -154,6 +154,33 @@ struct SettingsView: View {
         }
     }
 
+    /// Bridges the (hour, minute) Ints stored in AppStorage to a `Date`
+    /// that `DatePicker(.hourAndMinute)` can edit. The date component is
+    /// arbitrary — only the time is meaningful.
+    private var quietHoursStartBinding: Binding<Date> {
+        binding(hour: $settings.quietHoursStartHour, minute: $settings.quietHoursStartMinute)
+    }
+
+    private var quietHoursEndBinding: Binding<Date> {
+        binding(hour: $settings.quietHoursEndHour, minute: $settings.quietHoursEndMinute)
+    }
+
+    private func binding(hour: Binding<Int>, minute: Binding<Int>) -> Binding<Date> {
+        Binding(
+            get: {
+                var comps = DateComponents()
+                comps.hour = hour.wrappedValue
+                comps.minute = minute.wrappedValue
+                return Calendar.current.date(from: comps) ?? Date()
+            },
+            set: { newValue in
+                let cal = Calendar.current
+                hour.wrappedValue = cal.component(.hour, from: newValue)
+                minute.wrappedValue = cal.component(.minute, from: newValue)
+            }
+        )
+    }
+
     private var disconnectThresholdLabel: String {
         let v = Int(settings.minDisconnectDurationSeconds.rounded())
         if v == 0 { return "notify every drop" }
@@ -166,12 +193,4 @@ struct SettingsView: View {
         return "\(v) second\(v == 1 ? "" : "s")"
     }
 
-    private func formatHour(_ hour: Int) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "h a"
-        var comps = DateComponents()
-        comps.hour = hour
-        let date = Calendar.current.date(from: comps) ?? Date()
-        return f.string(from: date)
-    }
 }

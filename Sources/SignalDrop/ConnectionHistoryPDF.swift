@@ -32,7 +32,13 @@ struct ConnectionHistoryPDFView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .center, spacing: 10) {
+                if let appIcon = loadAppIcon() {
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 28, height: 28)
+                }
                 Text("SignalDrop")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(.black)
@@ -48,6 +54,21 @@ struct ConnectionHistoryPDFView: View {
                 .font(.system(size: 10))
                 .foregroundColor(.gray)
         }
+    }
+
+    /// Pulls the app icon from the running bundle so the PDF receipt
+    /// shows a branded wordmark instead of plain text. The bundle's
+    /// `Resources/AppIcon.icns` is loadable via NSImage. Returns nil
+    /// when running in unusual contexts (unit tests, etc.); the header
+    /// falls back to text-only.
+    private func loadAppIcon() -> NSImage? {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let img = NSImage(contentsOf: url) {
+            return img
+        }
+        // Fallback path: NSApp icon (matches the running app's icon
+        // even if AppIcon.icns isn't a discoverable resource).
+        return NSApp?.applicationIconImage
     }
 
     private var outagesSection: some View {

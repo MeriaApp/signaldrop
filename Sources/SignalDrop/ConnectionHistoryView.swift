@@ -54,6 +54,7 @@ struct ConnectionHistoryView: View {
                 }
                 .padding(16)
             }
+            LastUpdatedFooter(scope: .history(at: model.lastRefreshedAt))
         }
         .sheet(item: $selectedOutage) { outage in
             OutageDetailSheet(
@@ -644,6 +645,9 @@ final class ConnectionHistoryModel: ObservableObject {
         didSet { recompute() }
     }
     @Published private(set) var report: ConnectionHistoryReport
+    /// Last time the report was rebuilt — drives the "Updated Xs ago"
+    /// footer (§3.21). Set on every refresh path.
+    @Published private(set) var lastRefreshedAt: Date = Date()
 
     private let service: ConnectionHistoryService
 
@@ -663,10 +667,12 @@ final class ConnectionHistoryModel: ObservableObject {
 
     func refresh() {
         report = service.report(for: period)
+        lastRefreshedAt = Date()
     }
 
     private func recompute() {
         report = service.report(for: period)
+        lastRefreshedAt = Date()
     }
 
     func exportPDF() {

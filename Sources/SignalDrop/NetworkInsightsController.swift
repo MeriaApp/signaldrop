@@ -124,7 +124,10 @@ final class NetworkInsightsController: NSObject {
         case .d7:  suffix = "7d"
         case .d30: suffix = "30d"
         }
-        return "SignalDrop Receipt — \(suffix) — \(date).pdf"
+        // Hyphen-minus (not em-dash) so the filename survives zipped
+        // email attachments on Windows + cross-platform sync tools that
+        // don't normalize Unicode dash variants.
+        return "SignalDrop Receipt - \(suffix) - \(date).pdf"
     }
 
     private func finish() {
