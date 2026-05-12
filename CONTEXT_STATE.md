@@ -158,3 +158,70 @@ Open the handoff prompt at `prompts/handoff-v1.1-polish-round1-2026-05-11.md`, r
 - Small Business Program enrollment (Jesse-gated browser form).
 - Google Search Console + Bing Webmaster Tools verification (Jesse-gated OAuth).
 - Jesse origin blog post personalization pass at `/blog/why-i-built-signaldrop`.
+
+---
+
+### 2026-05-11 23:05 — v1.1 polish Rounds 2 + 3 shipped + v1.1.0 bump staged (commits a6b99ec → 6a3e79b, pushed)
+
+**Picked up from the Round 1 handoff. 7 verified commits, pushed to MeriaApp/signaldrop:main.**
+
+**Major findings + work:**
+
+1. **§1.3 OUI lookup failed Round-1 verification.** Real-world cafe scan on the morning after the Round-1 ship produced only **12% hit rate** vs the claimed 95%. The curated 971-entry subset was missing TP-Link Systems' `5C:E9:31` / `78:8C:B5`, Arcadyan, Peplink, Google Nest WiFi at `E4:5E:1B`, plus 38% of visible BSSIDs that turned out to be **locally-administered MACs** (iPhone Personal Hotspots, multi-SSID guest networks) which by design will never appear in a global OUI registry.
+   
+   **Root fix in `a6b99ec`:** new `Scripts/generate-oui-bundle.py` fetches the full IEEE MA-L registry (~39k entries) from `standards-oui.ieee.org/oui/oui.csv`, strips legal boilerplate (`Inc.`, `Corp.`, `Co., Ltd.`, GmbH, Ltd.), applies a PRETTY dict for vendor-specific shortenings (Cisco Systems → Cisco, Hon Hai Precision Industry → Foxconn, etc.). Bundle is 1.1 MB minified (was 25 KB). `OUILookup` adds `VendorInfo.privateMAC` case detected via bit 1 of the first MAC byte; convenience `vendor(for:)` returns "Private MAC" for these. **Combined real-world coverage now 100%** (62% known vendor, 38% Private MAC label, 0% true miss).
+
+2. **§2.6 Signal Graph TX rate split into its own panel** (`e75d243`). Was mapping Mbps onto the dBm axis via `-100 + Int(transmitRate / 20)` — visually deceptive. New stacked layout (Apple Stocks pattern): dBm chart on top, optional 90pt-tall TX rate chart below, shared X-axis time domain. New `sharedXDomain` + `visibleSamples` computed properties scope the Y-autoscale and hover annotation to the visible time window.
+
+3. **§2.11 Animated scanner empty state** (`e75d243`). `.symbolEffect(.variableColor.iterative, options: .repeating)` on the `wifi` SF Symbol while scanning. macOS 14+ only; static glyph on 13.0.
+
+4. **§2.7 Outage drill-in detail sheet** (`7e36c41`). Clicking a row in the Outages table opens a sheet with Started / Ended / Duration / Network / Likely cause + the 60s of events leading up to the disconnect + [Copy details] + [Show in Signal Graph] (which swaps tabs — full time-range pre-scroll deferred to v1.2). Required lifting `selectedTab` from `@State` to `@Published` on `NetworkInsightsModel` so the outage sheet's button could flip it. Required switching the Table from inner-Button cells to native `selection: Binding<UUID?>` because macOS Table absorbs row clicks for selection.
+
+5. **§2.10 Test notification button in Settings** (`7e36c41`). "Try it" section below Sound. Disabled when OS-level notifications are denied; surfaces a hint explaining why. Fires through the same `NotificationService` real disconnects use so sound/quiet-hours toggles are honored in the preview.
+
+6. **§3.13 "Likely cause" column** (`7e36c41`). Renders "Not classified" instead of "—" for older events. Conditional TableColumn hiding would need macOS 14.4+ `TableColumnBuilder.buildIf` (we deploy to 13.0).
+
+7. **§2.12 grade tooltip + §2.8 Connected pill** (`38fee6c`). Hover tooltip on the History grade pill explains the score math + next-grade threshold. Accent-tinted "Connected" capsule on Scanner rows that match the active SSID.
+
+8. **Round 3 batch** (`f62664e`): §3.14 PDF wordmark (app icon next to "SignalDrop"), §3.15 PDF filename uses hyphen-minus not em-dash, §3.16 quiet-hours minute precision via `DatePicker(.hourAndMinute)`, §3.17 Scanner sort (Signal + Channel sortable), §3.18 band filter Picker (All / 2.4 / 5 / 6 GHz), §3.19 Signal Graph pause button, §3.20 time-range presets (1m/5m/15m/1h), §3.21 "Last updated" footers across all three tabs via a single `LastUpdatedFooter` view with `TimelineView(.periodic)`.
+
+9. **§3.23 accessibility** (`7fd25ee`). `.accessibilityLabel` on every custom control: tab buttons, legend toggles, band/time-range Pickers, pause button, ConnectedPill. SignalBars collapses its 4 colored rectangles into one VoiceOver element labeled "Signal strength: 3 of 4 bars, −58 dBm" so the user hears the data, not the visual decomposition.
+
+10. **STAGED v1.1.0 bump** (`6a3e79b`). `MARKETING_VERSION` 1.0.2 → 1.1.0, build 5 → 6. Drafted ~3,140-char What's New copy at `AppStore/whats-new-1.1.0.md`. **NOT submitted to ASC** — Jesse approves the bump + cancel/replace cycle separately. The in-review 1.0.2 reviewSubmission must be canceled before the 1.1.0 one can be created.
+
+**Verification done:**
+
+- Real-user drive via `cliclick` + `osascript` System Events for menu navigation + AX hierarchy enumeration ("find all buttons + positions" pattern proved load-bearing).
+- Region screenshots + direct Read via Opus 4.7 vision.
+- Verified all six Round-1 fixes work as a real user expects (one re-opened — §1.3).
+- Verified all Round-2 and Round-3 fixes end-to-end on the running app.
+- Build green at `1.1.0` build 6 in `Info.plist`.
+- Combined OUI coverage measured at 100% on live 24-BSSID cafe scan.
+
+**Verification deferred (limitation, not failure):**
+
+- macOS notification banner capture for the test-notification button — possible DND / Focus mode suppression on this Mac; the code path is identical to real-disconnect notifications which we know works.
+- Hover tooltip on the grade pill — macOS `.help(...)` tooltips don't capture cleanly via `screencapture`. Code is in.
+- Variable-color `wifi` animation on the scanner empty state — frame-by-frame capture didn't see the animation (likely a slow cycle); the API is correct and gated `#available(macOS 14, *)`.
+
+**Outstanding (Jesse-gated):**
+
+1. **v1.1 release decision.** Bump is staged in `6a3e79b`. When Jesse approves:
+   - Cancel the in-review 1.0.2 reviewSubmission (PATCH `canceled: true`).
+   - Archive + upload 1.1.0 build 6 via `xcodebuild archive` + altool / Transporter.
+   - Create new reviewSubmission with `releaseType=AFTER_APPROVAL` per the standing preference.
+   The full sequence + ASC field copy is documented at `AppStore/whats-new-1.1.0.md`.
+2. **Press outreach** still NOT sent — wait for v1.1 LIVE on App Store.
+3. **Small Business Program enrollment** — Jesse-gated browser form.
+4. **Google Search Console + Bing Webmaster Tools** verification.
+5. **Jesse origin blog post personalization** at `/blog/why-i-built-signaldrop`.
+6. **NEW: Remote-host availability alerts** — captured as a v1.2+ idea memory after Jesse mentioned it mid-session. SignalDrop extends to monitoring reachability of home Mac Minis / Synologys / headless GPU rigs running local LLMs. Natural extension of "catch the drop, prove it" — no WiFi-tool competitor has it.
+
+**Memory files saved:**
+- `project_signaldrop_v1_1_round_2_3_shipped_2026_05_11.md` — durable session summary
+- `reference_oui_vendor_lookup_pattern.md` — corrected to the full-registry approach (replaces the obsolete curated-subset claim)
+- `reference_swiftui_table_macos_14_4_conditional_columns.md` — TableColumnBuilder.buildIf gotcha
+- `idea_signaldrop_remote_host_availability_alerts.md` — Jesse's mid-session feature idea, queued for v1.2
+
+**Next session recommendation:**
+When Jesse approves the v1.1 bump, run the ASC submission sequence from `AppStore/whats-new-1.1.0.md` step-by-step. The cancel of the in-review 1.0.2 is the load-bearing first step.
