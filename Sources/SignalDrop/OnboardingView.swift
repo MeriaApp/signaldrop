@@ -162,9 +162,10 @@ struct OnboardingView: View {
             }
             if !someMissing {
                 VStack(alignment: .leading, spacing: 8) {
-                    tip("Click the WiFi-arc icon in your menu bar for live status.")
-                    tip("Toggle Launch at Login from the menu to start on boot.")
-                    tip("Use Generate ISP Report to export downtime data for support chats.")
+                    tip("Look for the Wi-Fi glyph in your menu bar — its shape changes with signal, internet status, and Wi-Fi power.")
+                    tip("Open Network Insights (⌘N) for the live scanner, signal graph, and connection history.")
+                    tip("Toggle Launch at Login from the menu so SignalDrop starts on boot.")
+                    tip("From the Connection History tab, export a PDF receipt to send to your ISP.")
                 }
                 .padding(.top, 4)
             }

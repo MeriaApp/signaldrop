@@ -13,9 +13,13 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     private lazy var settingsController = SettingsController(settings: notificationSettings)
     private lazy var networkInsights = NetworkInsightsController(
         eventLog: eventLog,
+        notificationSettings: notificationSettings,
         getCurrentState: { [unowned self] in self.wifiMonitor.currentState() }
     )
-    private lazy var connectionQuality = ConnectionQuality(eventLog: eventLog)
+    private lazy var connectionQuality = ConnectionQuality(
+        eventLog: eventLog,
+        notificationSettings: notificationSettings
+    )
     private lazy var ispReport = ISPReport(eventLog: eventLog, connectionQuality: connectionQuality)
     private lazy var ispReceipt = ISPReceipt(eventLog: eventLog, connectionQuality: connectionQuality)
 
@@ -44,11 +48,15 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     private var lastInternetLostAt: Date?
     private let causeWindow: TimeInterval = 60
 
-    // Throttling: prevent notification spam during WiFi flapping
+    // Throttling: prevent notification spam during WiFi flapping. The
+    // disconnect + connect cases are deliberately absent — phantom-drop
+    // deferral already handles their spam case, and a leftover 5s throttle
+    // here would silence the legitimate second drop in back-to-back modem
+    // resets (the exact pattern the user needs to know about). Signal
+    // degraded + internet status retain a longer throttle because RSSI +
+    // path-monitor flapping is still common.
     private var lastNotificationTime: [WiFiEventType: Date] = [:]
     private let throttleIntervals: [WiFiEventType: TimeInterval] = [
-        .disconnected: 5,
-        .connected: 5,
         .signalDegraded: 30,
         .signalRecovered: 30,
         .internetLost: 10,
@@ -275,10 +283,10 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
 
     /// Apply per-event-type settings + throttle, then emit the macOS notification.
     private func sendNotification(for event: WiFiEvent) {
-        // Disconnect + internetLost are always treated as critical — those
-        // are the events the user needs to know about even during quiet hours.
-        let isCritical = event.type == .disconnected || event.type == .internetLost
-        guard notificationSettings.shouldNotify(for: event.type, isCritical: isCritical) else { return }
+        // Quiet Hours suppresses every category uniformly. A 3am modem-reset
+        // disconnect is exactly the thing a user enabling quiet hours wants
+        // silenced; the History tab + ISP receipt still capture it.
+        guard notificationSettings.shouldNotify(for: event.type) else { return }
         guard shouldNotify(for: event.type) else { return }
         lastNotificationTime[event.type] = Date()
 
@@ -289,8 +297,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             notificationService.send(
                 title: "WiFi Disconnected",
                 body: event.ssid.map { "Lost connection to \($0)" } ?? "WiFi connection lost",
-                sound: soundEnabled,
-                critical: true
+                sound: soundEnabled
             )
 
         case .connected:

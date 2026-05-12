@@ -2,11 +2,19 @@ import Foundation
 
 /// Computes a connection quality grade from recent event history.
 /// Displayed in the menu bar as a letter grade with trend arrow.
+///
+/// Phantom-drop filter: disconnect→connect pairs shorter than
+/// `notificationSettings.minDisconnectDurationSeconds` are excluded from the
+/// outage count + downtime sum. This keeps the menu-bar grade aligned with
+/// the user's "phantom drops don't count" expectation — same threshold as
+/// the notification suppression.
 final class ConnectionQuality {
     private let eventLog: EventLog
+    private let notificationSettings: NotificationSettings
 
-    init(eventLog: EventLog) {
+    init(eventLog: EventLog, notificationSettings: NotificationSettings) {
         self.eventLog = eventLog
+        self.notificationSettings = notificationSettings
     }
 
     enum Grade: String {
@@ -77,16 +85,22 @@ final class ConnectionQuality {
         let recentEvents = eventLog.eventsInRange(from: oneDayAgo, to: now)
         let previousEvents = eventLog.eventsInRange(from: twoDaysAgo, to: oneDayAgo)
 
-        let disconnects = recentEvents.filter { $0.type == .disconnected }
-        let disconnectCount = disconnects.count
+        let threshold = notificationSettings.minDisconnectDurationSeconds
 
-        // Calculate downtime from disconnect/connect pairs
-        let (totalDowntime, longestOutage, avgDowntime) = computeDowntime(
-            events: recentEvents, periodStart: oneDayAgo, periodEnd: now
+        // Calculate downtime + counts from disconnect/connect pairs, with the
+        // phantom-drop filter applied so the grade matches the user's
+        // notification-level expectation.
+        let (totalDowntime, longestOutage, avgDowntime, disconnectCount) = computeDowntime(
+            events: recentEvents, periodStart: oneDayAgo, periodEnd: now,
+            minOutageDuration: threshold
         )
 
-        // Previous period for trend
-        let prevDisconnects = previousEvents.filter { $0.type == .disconnected }.count
+        // Previous period for trend — also filtered so the trend comparison
+        // doesn't whip on phantom-drop noise.
+        let (_, _, _, prevDisconnects) = computeDowntime(
+            events: previousEvents, periodStart: twoDaysAgo, periodEnd: oneDayAgo,
+            minOutageDuration: threshold
+        )
 
         // Score (0-100): penalize disconnects and downtime
         var score = 100
@@ -106,8 +120,13 @@ final class ConnectionQuality {
             trend = .stable
         }
 
-        // Peak drop hour
-        let peakHour = findPeakHour(disconnects: disconnects)
+        // Peak drop hour — only consider disconnects whose outage duration
+        // crossed the phantom threshold, so a flood of brief roams during
+        // commute time doesn't spuriously become "peak drop hour."
+        let realDisconnects = realDisconnectsAboveThreshold(
+            events: recentEvents, minOutageDuration: threshold
+        )
+        let peakHour = findPeakHour(disconnects: realDisconnects)
 
         return Report(
             grade: grade,
@@ -121,15 +140,20 @@ final class ConnectionQuality {
         )
     }
 
-    /// Generate a multi-day reliability summary for a specific network
+    /// Generate a multi-day reliability summary for a specific network.
+    /// Phantom-drop filter applied so per-network uptime reflects only
+    /// outages the user would have been notified about.
     func networkReliability(ssid: String, days: Int = 7) -> (uptime: Double, disconnects: Int, avgDowntime: TimeInterval) {
         let now = Date()
         let start = now.addingTimeInterval(-Double(days) * 86400)
         let events = eventLog.eventsInRange(from: start, to: now)
             .filter { $0.ssid == ssid }
 
-        let disconnects = events.filter { $0.type == .disconnected }.count
-        let (totalDowntime, _, avgDowntime) = computeDowntime(events: events, periodStart: start, periodEnd: now)
+        let threshold = notificationSettings.minDisconnectDurationSeconds
+        let (totalDowntime, _, avgDowntime, disconnects) = computeDowntime(
+            events: events, periodStart: start, periodEnd: now,
+            minOutageDuration: threshold
+        )
 
         let totalPeriod = now.timeIntervalSince(start)
         let uptime = totalPeriod > 0 ? ((totalPeriod - totalDowntime) / totalPeriod) * 100 : 100
@@ -139,7 +163,14 @@ final class ConnectionQuality {
 
     // MARK: - Private
 
-    private func computeDowntime(events: [WiFiEvent], periodStart: Date, periodEnd: Date) -> (total: TimeInterval, longest: TimeInterval, average: TimeInterval) {
+    /// Build downtime stats from disconnect/connect pairs.
+    /// Pairs whose duration is below `minOutageDuration` are discarded entirely
+    /// (zero contribution to totals, count, longest). The trailing still-down
+    /// case is kept regardless because we can't yet judge its final length.
+    private func computeDowntime(
+        events: [WiFiEvent], periodStart: Date, periodEnd: Date,
+        minOutageDuration: TimeInterval
+    ) -> (total: TimeInterval, longest: TimeInterval, average: TimeInterval, count: Int) {
         var totalDowntime: TimeInterval = 0
         var longestOutage: TimeInterval = 0
         var outageCount = 0
@@ -151,23 +182,56 @@ final class ConnectionQuality {
                 lastDisconnect = event.timestamp
             } else if event.type == .connected, let disc = lastDisconnect {
                 let duration = event.timestamp.timeIntervalSince(disc)
-                totalDowntime += duration
-                longestOutage = max(longestOutage, duration)
-                outageCount += 1
+                if duration >= minOutageDuration {
+                    totalDowntime += duration
+                    longestOutage = max(longestOutage, duration)
+                    outageCount += 1
+                }
                 lastDisconnect = nil
             }
         }
 
-        // If still disconnected
+        // Still disconnected at the end of the window — count if it's already
+        // past the threshold; otherwise the next sample will tell us.
         if let disc = lastDisconnect {
             let duration = periodEnd.timeIntervalSince(disc)
-            totalDowntime += duration
-            longestOutage = max(longestOutage, duration)
-            outageCount += 1
+            if duration >= minOutageDuration {
+                totalDowntime += duration
+                longestOutage = max(longestOutage, duration)
+                outageCount += 1
+            }
         }
 
         let avgDowntime = outageCount > 0 ? totalDowntime / Double(outageCount) : 0
-        return (totalDowntime, longestOutage, avgDowntime)
+        return (totalDowntime, longestOutage, avgDowntime, outageCount)
+    }
+
+    /// The subset of `.disconnected` events that survived the phantom-drop
+    /// filter — i.e. each one corresponds to an outage that crossed the
+    /// `minOutageDuration` threshold. Used by `findPeakHour` so commute-time
+    /// roaming bursts don't dominate the peak-hour estimate.
+    private func realDisconnectsAboveThreshold(
+        events: [WiFiEvent], minOutageDuration: TimeInterval
+    ) -> [WiFiEvent] {
+        var kept: [WiFiEvent] = []
+        var pending: WiFiEvent?
+        let sorted = events.sorted { $0.timestamp < $1.timestamp }
+        for event in sorted {
+            if event.type == .disconnected {
+                pending = event
+            } else if event.type == .connected, let disc = pending {
+                if event.timestamp.timeIntervalSince(disc.timestamp) >= minOutageDuration {
+                    kept.append(disc)
+                }
+                pending = nil
+            }
+        }
+        if let disc = pending {
+            // Conservatively include open-ended outages (we don't know yet
+            // whether the final length will cross the threshold).
+            kept.append(disc)
+        }
+        return kept
     }
 
     private func gradeFromScore(_ score: Int) -> Grade {

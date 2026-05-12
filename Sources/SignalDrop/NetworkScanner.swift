@@ -31,12 +31,16 @@ struct ScannedNetwork: Identifiable, Hashable {
         case band6GHz = "6 GHz"
         case unknown = "?"
 
-        static func from(channel: Int) -> ChannelBand {
-            switch channel {
-            case 1...14: return .band2_4GHz
-            case 36...177: return .band5GHz   // 5 GHz UNII bands
-            case 1...233 where channel >= 1: return .band6GHz  // 6 GHz Wi-Fi 6E
-            default: return .unknown
+        // Apple's CoreWLAN tags every channel with its band directly, so we
+        // never have to infer from the channel number (which is ambiguous —
+        // 6 GHz Wi-Fi 6E reuses channel numbers like 1, 5, 9 that 2.4 GHz
+        // also uses).
+        static func from(_ channel: CWChannel?) -> ChannelBand {
+            switch channel?.channelBand {
+            case .band2GHz: return .band2_4GHz
+            case .band5GHz: return .band5GHz
+            case .band6GHz: return .band6GHz
+            default:        return .unknown
             }
         }
     }
@@ -157,7 +161,7 @@ final class NetworkScanner {
             rssi: net.rssiValue,
             noise: net.noiseMeasurement,
             channel: channelNum,
-            channelBand: ScannedNetwork.ChannelBand.from(channel: channelNum),
+            channelBand: ScannedNetwork.ChannelBand.from(net.wlanChannel),
             channelWidth: width,
             security: ScannedNetwork.Security.from(net),
             countryCode: net.countryCode

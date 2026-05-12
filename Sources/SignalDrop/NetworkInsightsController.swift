@@ -18,6 +18,7 @@ final class NetworkInsightsController: NSObject {
 
     init(
         eventLog: EventLog,
+        notificationSettings: NotificationSettings,
         getCurrentState: @escaping () -> WiFiState
     ) {
         self.getCurrentState = getCurrentState
@@ -27,7 +28,10 @@ final class NetworkInsightsController: NSObject {
             sampleStore: sampleStore,
             getCurrentState: getCurrentState
         )
-        let historyService = ConnectionHistoryService(eventLog: eventLog)
+        let historyService = ConnectionHistoryService(
+            eventLog: eventLog,
+            notificationSettings: notificationSettings
+        )
         self.historyModel = ConnectionHistoryModel(service: historyService)
         self.historyModel.onExportPDF = { [weak self] report in
             self?.exportPDF(report: report)

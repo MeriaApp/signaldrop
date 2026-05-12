@@ -98,16 +98,33 @@ struct ConnectionHistoryReport {
     /// Per-SSID rollup of disconnects/downtime within the period.
     /// Sorted worst-first (most disconnects, then most downtime).
     let perNetwork: [NetworkSummary]
+    /// Number of disconnect→connect pairs that fell below the user's
+    /// `minDisconnectDurationSeconds` threshold and were excluded from the
+    /// grade math, outage count, timeline, and per-network rollup. Surfaced
+    /// to the user as a footnote so the History tab agrees with the
+    /// notification-level "phantom drops are silenced" expectation.
+    let filteredBriefRoamCount: Int
+    /// Threshold (in seconds) used to filter `filteredBriefRoamCount`. Carried
+    /// alongside the count so the footnote can name the cutoff.
+    let filterThresholdSeconds: TimeInterval
 }
 
 /// Builds a `ConnectionHistoryReport` from the existing EventLog.
 /// Lightweight — recomputes from scratch on every call. EventLog already
 /// indexes by timestamp so the underlying query is cheap.
+///
+/// Phantom-drop filter: outages shorter than
+/// `notificationSettings.minDisconnectDurationSeconds` are excluded from the
+/// grade math, outage count, timeline buckets, and per-network rollup. Their
+/// count is surfaced separately so the user can see "we filtered N brief
+/// roams" rather than wondering why the receipt doesn't match the raw log.
 final class ConnectionHistoryService {
     private let eventLog: EventLog
+    private let notificationSettings: NotificationSettings
 
-    init(eventLog: EventLog) {
+    init(eventLog: EventLog, notificationSettings: NotificationSettings) {
         self.eventLog = eventLog
+        self.notificationSettings = notificationSettings
     }
 
     /// Events in the 60-second window leading up to and through an
@@ -133,7 +150,9 @@ final class ConnectionHistoryService {
         let events = eventLog.eventsInRange(from: start, to: end)
             .sorted { $0.timestamp < $1.timestamp }
 
-        let outages = reconstructOutages(events: events, periodEnd: end)
+        let threshold = notificationSettings.minDisconnectDurationSeconds
+        let allOutages = reconstructOutages(events: events, periodEnd: end)
+        let (outages, filteredCount) = filterBriefRoams(allOutages, minDuration: threshold)
 
         let totalDowntime = outages.reduce(0) { $0 + $1.durationSeconds }
         let longestOutage = outages.map(\.durationSeconds).max() ?? 0
@@ -172,8 +191,30 @@ final class ConnectionHistoryService {
             buckets: buckets,
             outages: outages.sorted { $0.start > $1.start },
             knownNetworks: networks,
-            perNetwork: perNetwork
+            perNetwork: perNetwork,
+            filteredBriefRoamCount: filteredCount,
+            filterThresholdSeconds: threshold
         )
+    }
+
+    /// Partition raw outages into the kept set + the count of "brief roams"
+    /// dropped below the threshold. Open-ended outages (no `end`) are kept
+    /// regardless because we can't yet judge their final length.
+    private func filterBriefRoams(
+        _ outages: [OutageRecord], minDuration: TimeInterval
+    ) -> (kept: [OutageRecord], filtered: Int) {
+        if minDuration <= 0 { return (outages, 0) }
+        var kept: [OutageRecord] = []
+        var filtered = 0
+        kept.reserveCapacity(outages.count)
+        for outage in outages {
+            if outage.end == nil || outage.durationSeconds >= minDuration {
+                kept.append(outage)
+            } else {
+                filtered += 1
+            }
+        }
+        return (kept, filtered)
     }
 
     private func computePerNetwork(networks: [String], outages: [OutageRecord]) -> [NetworkSummary] {

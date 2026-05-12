@@ -97,7 +97,7 @@ struct SettingsView: View {
                         .datePickerStyle(.compact)
                         Spacer()
                     }
-                    Text("Non-critical notifications are suppressed during this window. Disconnects and internet-lost still fire because they're the events you actually need to act on.")
+                    Text("Every notification is silenced during this window — disconnects and internet-lost included. Outages still log to Connection History and the ISP receipt; SignalDrop just leaves you alone.")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

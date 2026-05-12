@@ -63,9 +63,10 @@ final class NotificationSettings: ObservableObject {
     /// noisier than link state.
     @AppStorage("notify.minSignalDegradedDuration") var minSignalDegradedDurationSeconds: Double = 10.0
 
-    /// When ON, suppress all non-critical notifications during the quiet
-    /// hours window. Internet-lost + disconnect notifications still fire
-    /// because those are the critical category.
+    /// When ON, suppress every notification category during the quiet
+    /// hours window. Disconnects + internet-lost included — they still
+    /// land in the History tab and the ISP receipt, but the user is left
+    /// alone. Aligns with how macOS Focus modes work.
     @AppStorage("notify.quietHoursEnabled") var quietHoursEnabled: Bool = false
 
     /// Hour-of-day (0-23) when quiet hours begin. Combined with
@@ -108,11 +109,8 @@ final class NotificationSettings: ObservableObject {
 
     /// True if the user wants to be notified about this event type right now.
     /// Combines per-event-type opt-in + quiet-hours suppression.
-    ///
-    /// `isCritical` overrides quiet hours — used for long outages so the
-    /// user still finds out about a 30-minute drop at 2am even if quiet
-    /// hours are enabled.
-    func shouldNotify(for type: WiFiEventType, isCritical: Bool = false, now: Date = Date()) -> Bool {
+    /// Quiet Hours suppresses every category uniformly when enabled.
+    func shouldNotify(for type: WiFiEventType, now: Date = Date()) -> Bool {
         let typeEnabled: Bool
         switch type {
         case .disconnected:      typeEnabled = notifyDisconnected
@@ -126,7 +124,7 @@ final class NotificationSettings: ObservableObject {
         case .powerOff:          typeEnabled = notifyPowerOff
         }
         guard typeEnabled else { return false }
-        if !isCritical && isInQuietHours(now: now) { return false }
+        if isInQuietHours(now: now) { return false }
         return true
     }
 }

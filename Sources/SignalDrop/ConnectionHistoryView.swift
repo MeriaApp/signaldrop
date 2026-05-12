@@ -48,6 +48,7 @@ struct ConnectionHistoryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     HistorySummaryCard(report: model.report)
+                    FilteredBriefRoamsFootnote(report: model.report)
                     HistoryTimelineStrip(report: model.report)
                     HistoryPerNetworkSection(report: model.report)
                     HistoryOutagesSection(report: model.report, onSelect: { selectedOutage = $0 })
@@ -64,6 +65,39 @@ struct ConnectionHistoryView: View {
                 onDismiss: { selectedOutage = nil }
             )
         }
+    }
+}
+
+// MARK: - Filtered brief-roams footnote
+
+/// Small subtitle that appears when the report excluded one or more outages
+/// shorter than the user's `minDisconnectDurationSeconds` threshold. Keeps
+/// the History tab honest about WHY the grade is calmer than the raw event
+/// log would suggest — same threshold the notifications use.
+struct FilteredBriefRoamsFootnote: View {
+    let report: ConnectionHistoryReport
+
+    var body: some View {
+        if report.filteredBriefRoamCount > 0 {
+            HStack(spacing: 6) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .accessibilityLabel(message)
+            }
+            .padding(.leading, 4)
+        }
+    }
+
+    private var message: String {
+        let n = report.filteredBriefRoamCount
+        let secs = Int(report.filterThresholdSeconds.rounded())
+        let noun = n == 1 ? "brief roam" : "brief roams"
+        let s = secs == 1 ? "second" : "seconds"
+        return "\(n) \(noun) under \(secs) \(s) filtered — same threshold as notifications. Tune in Settings."
     }
 }
 
