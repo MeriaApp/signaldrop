@@ -11,7 +11,6 @@ import Charts
 struct NetworkInsightsView: View {
     @ObservedObject var model: NetworkInsightsModel
     @ObservedObject var historyModel: ConnectionHistoryModel
-    @State private var selectedTab: Tab = .scanner
 
     enum Tab: String, CaseIterable, Identifiable {
         case scanner = "Nearby networks"
@@ -26,7 +25,7 @@ struct NetworkInsightsView: View {
             HStack(spacing: 4) {
                 ForEach(Array(Tab.allCases.enumerated()), id: \.element) { idx, tab in
                     Button {
-                        selectedTab = tab
+                        model.selectedTab = tab
                     } label: {
                         Text(tab.rawValue)
                             .font(.system(size: 13, weight: .medium))
@@ -34,16 +33,17 @@ struct NetworkInsightsView: View {
                             .padding(.horizontal, 14)
                             .background(
                                 RoundedRectangle(cornerRadius: 7)
-                                    .fill(selectedTab == tab ? Color.accentColor.opacity(0.18) : Color.clear)
+                                    .fill(model.selectedTab == tab ? Color.accentColor.opacity(0.18) : Color.clear)
                             )
-                            .foregroundColor(selectedTab == tab ? .primary : .secondary)
+                            .foregroundColor(model.selectedTab == tab ? .primary : .secondary)
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(KeyEquivalent(Character("\(idx + 1)")), modifiers: .command)
+                    .accessibilityLabel(tab.rawValue)
                 }
                 Spacer()
                 // Rescan only applies to the Scanner tab.
-                if selectedTab == .scanner {
+                if model.selectedTab == .scanner {
                     Button {
                         model.startScan()
                     } label: {
@@ -66,7 +66,7 @@ struct NetworkInsightsView: View {
             .overlay(Rectangle().frame(height: 1).foregroundColor(Color.gray.opacity(0.15)), alignment: .bottom)
 
             Group {
-                switch selectedTab {
+                switch model.selectedTab {
                 case .scanner: NearbyNetworksList(model: model)
                 case .signal:  SignalGraphPane(model: model)
                 case .history: ConnectionHistoryView(model: historyModel)
@@ -642,6 +642,10 @@ final class NetworkInsightsModel: ObservableObject {
     @Published var connectedSSID: String?
     @Published var isScanning: Bool = false
     @Published var scanError: String?
+    /// Tab the window opens to and that cross-tab actions (e.g. outage
+    /// drill-in's "Show in Signal Graph" button) can mutate. Lifted out
+    /// of the view's `@State` so non-view code can flip tabs cleanly.
+    @Published var selectedTab: NetworkInsightsView.Tab = .scanner
 
     private let scanner: NetworkScanner
     private let sampleStore: SignalSampleStore

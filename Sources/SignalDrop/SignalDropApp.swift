@@ -109,6 +109,14 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         menuBar.onShowNetworkInsights = { [weak self] in self?.networkInsights.show() }
         menuBar.onShowSettings = { [weak self] in self?.settingsController.show() }
 
+        // Settings → "Send test notification" button. Fires through the
+        // same NotificationService used by real disconnects so any
+        // sound / quiet-hours / per-event-toggle changes the user made
+        // are honored in the preview.
+        settingsController.onTestNotification = { [weak self] in
+            self?.sendTestNotification()
+        }
+
         #if !APPSTORE
         menuBar.onOpenHooksFolder = { [weak self] in self?.openHooksFolder() }
         menuBar.onDisconnect = { [weak self] in self?.disconnectFromDeadNetwork() }
@@ -496,6 +504,21 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             title: "Receipt copied",
             body: "Paste it into your ISP support chat for concrete reliability data.",
             sound: false
+        )
+    }
+
+    // MARK: - Test notification (§2.10)
+
+    /// Sends a sample disconnect notification on demand. Title + body
+    /// mirror the real disconnect copy so the preview is accurate; the
+    /// only addition is the "(test)" suffix so the user can tell this
+    /// one apart from a real event.
+    private func sendTestNotification() {
+        notificationService.send(
+            title: "WiFi Disconnected (test)",
+            body: "Test notification — real disconnects will look like this.",
+            sound: notificationSettings.soundEnabled,
+            critical: true
         )
     }
 

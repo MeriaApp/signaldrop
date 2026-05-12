@@ -7,6 +7,11 @@ import SwiftUI
 final class SettingsController: NSObject {
     private var window: NSWindow?
     private let settings: NotificationSettings
+    /// Wired by `SignalDropApp` so the "Send test notification" button
+    /// in `SettingsView` can fire a real macOS notification through the
+    /// existing `NotificationService` pipeline (same code path real
+    /// disconnects use, so sound/quiet-hours/etc. settings are honored).
+    var onTestNotification: (() -> Void)?
 
     init(settings: NotificationSettings) {
         self.settings = settings
@@ -20,7 +25,10 @@ final class SettingsController: NSObject {
             return
         }
 
-        let view = SettingsView(settings: settings)
+        let view = SettingsView(
+            settings: settings,
+            onTestNotification: { [weak self] in self?.onTestNotification?() }
+        )
         let hosting = NSHostingController(rootView: view)
 
         let win = NSWindow(

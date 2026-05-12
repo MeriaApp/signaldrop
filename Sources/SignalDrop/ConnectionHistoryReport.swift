@@ -110,6 +110,23 @@ final class ConnectionHistoryService {
         self.eventLog = eventLog
     }
 
+    /// Events in the 60-second window leading up to and through an
+    /// outage's start, filtered to the categories that explain the
+    /// drop: signal-degraded, internet-lost, ssid-changed, the
+    /// disconnect itself. Used by the outage detail sheet to show
+    /// lead-up context.
+    func contextEvents(forOutage outage: OutageRecord) -> [WiFiEvent] {
+        let windowStart = outage.start.addingTimeInterval(-60)
+        let windowEnd = outage.start.addingTimeInterval(1) // include the disconnect itself
+        let relevant: Set<WiFiEventType> = [
+            .signalDegraded, .signalRecovered, .internetLost,
+            .internetRestored, .ssidChanged, .disconnected, .powerOff,
+        ]
+        return eventLog.eventsInRange(from: windowStart, to: windowEnd)
+            .filter { relevant.contains($0.type) }
+            .sorted { $0.timestamp < $1.timestamp }
+    }
+
     func report(for period: HistoryPeriod) -> ConnectionHistoryReport {
         let end = Date()
         let start = end.addingTimeInterval(-period.seconds)

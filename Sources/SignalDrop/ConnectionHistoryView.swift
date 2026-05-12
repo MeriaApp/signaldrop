@@ -7,6 +7,7 @@ import SwiftUI
 /// downloadable receipt can't drift from each other.
 struct ConnectionHistoryView: View {
     @ObservedObject var model: ConnectionHistoryModel
+    @State private var selectedOutage: OutageRecord?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,10 +50,18 @@ struct ConnectionHistoryView: View {
                     HistorySummaryCard(report: model.report)
                     HistoryTimelineStrip(report: model.report)
                     HistoryPerNetworkSection(report: model.report)
-                    HistoryOutagesSection(report: model.report)
+                    HistoryOutagesSection(report: model.report, onSelect: { selectedOutage = $0 })
                 }
                 .padding(16)
             }
+        }
+        .sheet(item: $selectedOutage) { outage in
+            OutageDetailSheet(
+                outage: outage,
+                contextEvents: model.contextEvents(around: outage),
+                onJumpToSignalGraph: model.onJumpToSignalGraph,
+                onDismiss: { selectedOutage = nil }
+            )
         }
     }
 }
@@ -311,6 +320,28 @@ private struct PerNetworkRow: View {
 
 struct HistoryOutagesSection: View {
     let report: ConnectionHistoryReport
+    /// Called when a user taps (or double-clicks, depending on macOS
+    /// version) a row in the Outages table. The parent presents a sheet
+    /// with the per-outage drill-in. Optional so the section still
+    /// renders for callers that don't wire selection (e.g. the PDF
+    /// renderer, where rows can't be tapped).
+    var onSelect: ((OutageRecord) -> Void)? = nil
+
+    /// Tracks the selected row's UUID — Table's native selection
+    /// binding fires both on single click and arrow-key navigation.
+    /// When it transitions to a non-nil value we open the detail sheet.
+    @State private var selection: OutageRecord.ID?
+
+    /// Older events (pre-classifier) have nil causes. A column-full-of
+    /// em-dashes was the §3.13 complaint; rendering "Not classified" in
+    /// muted text instead tells the user explicitly that this row's
+    /// cause wasn't recorded rather than leaving them guessing whether
+    /// the dash is a bug or a known-unknown. Conditional column hiding
+    /// would need macOS 14.4+ TableColumnBuilder.buildIf — out of scope
+    /// for our 13.0 deployment target.
+    private func causeLabel(for outage: OutageRecord) -> String {
+        outage.cause ?? "Not classified"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -325,6 +356,12 @@ struct HistoryOutagesSection: View {
                     .background(
                         Capsule().fill(Color.secondary.opacity(0.15))
                     )
+                Spacer()
+                if !report.outages.isEmpty && onSelect != nil {
+                    Text("Click a row for details")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
             }
 
             if report.outages.isEmpty {
@@ -339,7 +376,7 @@ struct HistoryOutagesSection: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 24)
             } else {
-                Table(report.outages) {
+                Table(report.outages, selection: $selection) {
                     TableColumn("When") { row in
                         Text(historyFormatTimestamp(row.start))
                             .font(.system(size: 12, design: .monospaced))
@@ -359,12 +396,20 @@ struct HistoryOutagesSection: View {
                     .width(min: 120, ideal: 160)
 
                     TableColumn("Likely cause") { row in
-                        Text(row.cause ?? "—")
+                        Text(causeLabel(for: row))
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }
                 }
                 .frame(minHeight: 180, idealHeight: 260)
+                .onChange(of: selection) { newValue in
+                    guard let id = newValue,
+                          let outage = report.outages.first(where: { $0.id == id })
+                    else { return }
+                    onSelect?(outage)
+                    // Clear so re-tapping the same row reopens the sheet.
+                    selection = nil
+                }
             }
         }
         .padding(16)
@@ -372,6 +417,178 @@ struct HistoryOutagesSection: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(NSColor.controlBackgroundColor))
         )
+    }
+}
+
+// MARK: - Outage detail sheet (§2.7 drill-in)
+
+/// Per-outage drill-in surfaced when the user taps a row in the Outages
+/// table. Apple-grade modal: summary stats, likely cause, the 60s of
+/// events leading up to the disconnect, plus actions to copy details or
+/// jump to the Signal Graph centered on the disconnect time.
+struct OutageDetailSheet: View {
+    let outage: OutageRecord
+    /// EventLog events that fell inside the [start-60s, end] window —
+    /// surfaces the signal-degraded / internet-lost events that
+    /// preceded the disconnect so the user can see the lead-up.
+    let contextEvents: [WiFiEvent]
+    /// Optional jump-to-Signal-Graph callback. When supplied, the sheet
+    /// shows a "Show in Signal Graph" button that flips the tab and
+    /// scrolls to the outage timestamp.
+    let onJumpToSignalGraph: ((Date) -> Void)?
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+            Divider()
+            summarySection
+            if !contextEvents.isEmpty {
+                Divider()
+                contextSection
+            }
+            Spacer(minLength: 8)
+            footer
+        }
+        .padding(20)
+        .frame(minWidth: 460, idealWidth: 500, minHeight: 380, idealHeight: 460)
+    }
+
+    // MARK: Sections
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+                .font(.system(size: 18))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Outage")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                Text("\(historyFormatTimestamp(outage.start)) · \(historyFormatDuration(outage.durationSeconds))")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            Spacer()
+        }
+    }
+
+    private var summarySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            DetailRow(label: "Started", value: detailedTimestamp(outage.start))
+            if let end = outage.end {
+                DetailRow(label: "Ended", value: detailedTimestamp(end))
+            } else {
+                DetailRow(label: "Ended", value: "still offline")
+            }
+            DetailRow(label: "Duration", value: historyFormatDuration(outage.durationSeconds))
+            DetailRow(label: "Network", value: outage.ssid ?? "—")
+            DetailRow(
+                label: "Likely cause",
+                value: outage.cause ?? "Not classified — older event"
+            )
+        }
+    }
+
+    private var contextSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Events in the minute before")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+            ForEach(Array(contextEvents.enumerated()), id: \.offset) { _, ev in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Circle()
+                        .fill(ev.isNegative ? Color.red : Color.green)
+                        .frame(width: 6, height: 6)
+                    Text(timeOnly(ev.timestamp))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
+                    Text(ev.displayString)
+                        .font(.system(size: 12))
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private var footer: some View {
+        HStack {
+            Button {
+                copyDetailsToClipboard()
+            } label: {
+                Label("Copy details", systemImage: "doc.on.doc")
+            }
+            if let jump = onJumpToSignalGraph {
+                Button {
+                    jump(outage.start)
+                    onDismiss()
+                } label: {
+                    Label("Show in Signal Graph", systemImage: "chart.xyaxis.line")
+                }
+            }
+            Spacer()
+            Button("Done", action: onDismiss)
+                .keyboardShortcut(.defaultAction)
+        }
+    }
+
+    // MARK: Helpers
+
+    private func detailedTimestamp(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy 'at' h:mm:ss a"
+        return f.string(from: d)
+    }
+
+    private func timeOnly(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm:ss a"
+        return f.string(from: d)
+    }
+
+    private func copyDetailsToClipboard() {
+        var lines: [String] = [
+            "SignalDrop — Outage detail",
+            "Started:    \(detailedTimestamp(outage.start))",
+        ]
+        if let end = outage.end {
+            lines.append("Ended:      \(detailedTimestamp(end))")
+        } else {
+            lines.append("Ended:      still offline")
+        }
+        lines.append("Duration:   \(historyFormatDuration(outage.durationSeconds))")
+        lines.append("Network:    \(outage.ssid ?? "—")")
+        lines.append("Cause:      \(outage.cause ?? "not classified")")
+        if !contextEvents.isEmpty {
+            lines.append("")
+            lines.append("Lead-up events:")
+            for ev in contextEvents {
+                lines.append("  \(timeOnly(ev.timestamp))  \(ev.displayString)")
+            }
+        }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(lines.joined(separator: "\n"), forType: .string)
+    }
+}
+
+/// Label-value pair row used by the outage detail sheet. Consistent
+/// indentation + monospaced value column makes scanning easy.
+private struct DetailRow: View {
+    let label: String
+    let value: String
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .frame(width: 100, alignment: .leading)
+            Text(value)
+                .font(.system(size: 13))
+                .textSelection(.enabled)
+            Spacer()
+        }
     }
 }
 
@@ -392,6 +609,12 @@ final class ConnectionHistoryModel: ObservableObject {
     /// Set by the controller. Invoked when the user taps "Export PDF…".
     var onExportPDF: ((ConnectionHistoryReport) -> Void)?
 
+    /// Set by the controller. Invoked when the outage drill-in sheet's
+    /// "Show in Signal Graph" button fires. Receives the disconnect
+    /// timestamp so the receiver can switch tabs and (eventually) scroll
+    /// the graph to center on it. Optional — `nil` hides the button.
+    var onJumpToSignalGraph: ((Date) -> Void)?
+
     init(service: ConnectionHistoryService) {
         self.service = service
         self.report = service.report(for: .h24)
@@ -407,6 +630,15 @@ final class ConnectionHistoryModel: ObservableObject {
 
     func exportPDF() {
         onExportPDF?(report)
+    }
+
+    /// Returns the WiFi events that fell in the 60s window before an
+    /// outage started (and through the disconnect event itself). Filters
+    /// to negative / state-change events so the drill-in surfaces "what
+    /// was happening that led to this drop" rather than every routine
+    /// reconnect.
+    func contextEvents(around outage: OutageRecord) -> [WiFiEvent] {
+        service.contextEvents(forOutage: outage)
     }
 }
 

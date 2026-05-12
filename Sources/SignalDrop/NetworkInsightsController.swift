@@ -32,6 +32,14 @@ final class NetworkInsightsController: NSObject {
         self.historyModel.onExportPDF = { [weak self] report in
             self?.exportPDF(report: report)
         }
+        // Outage drill-in's "Show in Signal Graph" button flips the
+        // window's selected tab. The timestamp is passed through in
+        // case the Signal Graph eventually supports time-range pre-
+        // scroll (the audit's full §2.7 wish — for now we just swap
+        // the tab and let the user see the most recent data).
+        self.historyModel.onJumpToSignalGraph = { [weak self] _ in
+            self?.model.selectedTab = .signal
+        }
     }
 
     func show() {
