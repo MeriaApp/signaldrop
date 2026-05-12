@@ -9,6 +9,9 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     private let menuBar = MenuBarController()
     private let locationManager = LocationManager()
     private let onboarding = OnboardingController()
+    private lazy var networkInsights = NetworkInsightsController(
+        getCurrentState: { [unowned self] in self.wifiMonitor.currentState() }
+    )
     private lazy var connectionQuality = ConnectionQuality(eventLog: eventLog)
     private lazy var ispReport = ISPReport(eventLog: eventLog, connectionQuality: connectionQuality)
     private lazy var ispReceipt = ISPReceipt(eventLog: eventLog, connectionQuality: connectionQuality)
@@ -95,6 +98,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
                 NSWorkspace.shared.open(url)
             }
         }
+        menuBar.onShowNetworkInsights = { [weak self] in self?.networkInsights.show() }
 
         #if !APPSTORE
         menuBar.onOpenHooksFolder = { [weak self] in self?.openHooksFolder() }
