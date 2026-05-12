@@ -364,6 +364,11 @@ private struct SignalBars: View {
                     .frame(width: 4, height: CGFloat(i) * 3 + 4)
             }
         }
+        // Collapse the four individual rectangles into one VoiceOver
+        // element so the user hears "Signal strength: 3 of 4 bars,
+        // −58 dBm" rather than each bar announced separately.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Signal strength: \(bars) of 4 bars, \(rssi) dBm")
     }
 }
 
