@@ -41,6 +41,7 @@ final class MenuBarController {
     var onShowAbout: (() -> Void)?
     var onShowWelcome: (() -> Void)?
     var onShowNetworkInsights: (() -> Void)?
+    var onShowSettings: (() -> Void)?
     var onOpenLocationSettings: (() -> Void)?
     var onOpenNotificationSettings: (() -> Void)?
     var onQuit: (() -> Void)?
@@ -122,14 +123,23 @@ final class MenuBarController {
         menu.addItem(wifiSettingsBtn)
         #endif
 
-        let nearbyItem = NSMenuItem(
-            title: "Nearby Networks\u{2026}",
+        let insightsItem = NSMenuItem(
+            title: "Network Insights\u{2026}",
             action: #selector(showNetworkInsightsAction(_:)),
             keyEquivalent: "n"
         )
-        nearbyItem.keyEquivalentModifierMask = .command
-        nearbyItem.target = self
-        menu.addItem(nearbyItem)
+        insightsItem.keyEquivalentModifierMask = .command
+        insightsItem.target = self
+        menu.addItem(insightsItem)
+
+        let settingsItem = NSMenuItem(
+            title: "Settings\u{2026}",
+            action: #selector(showSettingsAction(_:)),
+            keyEquivalent: ","
+        )
+        settingsItem.keyEquivalentModifierMask = .command
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -497,6 +507,10 @@ final class MenuBarController {
 
     @objc private func showNetworkInsightsAction(_ sender: NSMenuItem) {
         onShowNetworkInsights?()
+    }
+
+    @objc private func showSettingsAction(_ sender: NSMenuItem) {
+        onShowSettings?()
     }
 
     @objc private func openLocationSettingsAction(_ sender: NSMenuItem) {

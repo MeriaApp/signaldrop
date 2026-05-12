@@ -9,12 +9,22 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     private let menuBar = MenuBarController()
     private let locationManager = LocationManager()
     private let onboarding = OnboardingController()
+    private let notificationSettings = NotificationSettings()
+    private lazy var settingsController = SettingsController(settings: notificationSettings)
     private lazy var networkInsights = NetworkInsightsController(
+        eventLog: eventLog,
         getCurrentState: { [unowned self] in self.wifiMonitor.currentState() }
     )
     private lazy var connectionQuality = ConnectionQuality(eventLog: eventLog)
     private lazy var ispReport = ISPReport(eventLog: eventLog, connectionQuality: connectionQuality)
     private lazy var ispReceipt = ISPReceipt(eventLog: eventLog, connectionQuality: connectionQuality)
+
+    /// Disconnect notification deferral. When a disconnect fires, we
+    /// schedule the notification for `minDisconnectDurationSeconds` later.
+    /// If the user reconnects before the timer fires, we cancel — the
+    /// drop was a phantom and the user doesn't need to be told.
+    private var pendingDisconnectTimer: Timer?
+    private var pendingDisconnectEvent: WiFiEvent?
 
     #if !APPSTORE
     private let webhookService = WebhookService()
@@ -99,6 +109,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             }
         }
         menuBar.onShowNetworkInsights = { [weak self] in self?.networkInsights.show() }
+        menuBar.onShowSettings = { [weak self] in self?.settingsController.show() }
 
         #if !APPSTORE
         menuBar.onOpenHooksFolder = { [weak self] in self?.openHooksFolder() }
@@ -207,14 +218,65 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         webhookService.fire(event: event)
         #endif
 
-        guard shouldNotify(for: event.type) else {
+        // Phantom-drop suppression: if a disconnect arrives, hold the
+        // notification for `minDisconnectDurationSeconds`. If a reconnect
+        // arrives within that window, cancel both — the drop was too brief
+        // to matter to the user.
+        if event.type == .disconnected {
+            scheduleDeferredDisconnectNotification(enriched)
             refreshUI()
             return
         }
+        if event.type == .connected, pendingDisconnectTimer != nil {
+            cancelPendingDisconnect()
+            // Skip the reconnect notification too — pairing a phantom drop
+            // with a "back online" toast is the worst of both worlds.
+            refreshUI()
+            return
+        }
+
+        sendNotification(for: enriched)
+        refreshUI()
+    }
+
+    /// Schedule the disconnect notification for `minDisconnectDurationSeconds`
+    /// from now. If a reconnect arrives first, the timer is cancelled.
+    private func scheduleDeferredDisconnectNotification(_ event: WiFiEvent) {
+        cancelPendingDisconnect()
+        pendingDisconnectEvent = event
+
+        let threshold = notificationSettings.minDisconnectDurationSeconds
+        if threshold <= 0 {
+            // User wants every drop notified — fire immediately.
+            sendNotification(for: event)
+            pendingDisconnectEvent = nil
+            return
+        }
+
+        pendingDisconnectTimer = Timer.scheduledTimer(withTimeInterval: threshold, repeats: false) { [weak self] _ in
+            guard let self, let pending = self.pendingDisconnectEvent else { return }
+            self.sendNotification(for: pending)
+            self.pendingDisconnectEvent = nil
+            self.pendingDisconnectTimer = nil
+        }
+    }
+
+    private func cancelPendingDisconnect() {
+        pendingDisconnectTimer?.invalidate()
+        pendingDisconnectTimer = nil
+        pendingDisconnectEvent = nil
+    }
+
+    /// Apply per-event-type settings + throttle, then emit the macOS notification.
+    private func sendNotification(for event: WiFiEvent) {
+        // Disconnect + internetLost are always treated as critical — those
+        // are the events the user needs to know about even during quiet hours.
+        let isCritical = event.type == .disconnected || event.type == .internetLost
+        guard notificationSettings.shouldNotify(for: event.type, isCritical: isCritical) else { return }
+        guard shouldNotify(for: event.type) else { return }
         lastNotificationTime[event.type] = Date()
 
-        let soundEnabled = UserDefaults.standard.bool(forKey: "soundEnabled")
-        let signalWarningsEnabled = UserDefaults.standard.bool(forKey: "signalWarningsEnabled")
+        let soundEnabled = notificationSettings.soundEnabled
 
         switch event.type {
         case .disconnected:
@@ -244,7 +306,6 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             notificationService.send(title: "Network Changed", body: body, sound: soundEnabled)
 
         case .signalDegraded:
-            guard signalWarningsEnabled else { break }
             notificationService.send(
                 title: "WiFi Signal Weak",
                 body: "Signal at \(event.rssi ?? 0) dBm — connection may drop",
@@ -252,7 +313,6 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             )
 
         case .signalRecovered:
-            guard signalWarningsEnabled else { break }
             notificationService.send(
                 title: "WiFi Signal Recovered",
                 body: "Signal improved to \(event.rssi ?? 0) dBm",
@@ -287,8 +347,6 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
                 sound: false
             )
         }
-
-        refreshUI()
     }
 
     /// Tag a disconnect with a likely-cause label based on the last 60s of events.

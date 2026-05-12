@@ -1,18 +1,22 @@
 import SwiftUI
 import Charts
 
-/// Top-level view shown in the "Nearby Networks" window. Two-tab layout:
+/// Top-level view shown in the "Network Insights" window. Three-tab layout:
 ///   - Scanner: a sortable table of nearby WiFi networks with signal bars,
 ///     channel, security, and band.
-///   - Signal: a live line graph of the connected network's RSSI, noise,
+///   - Signal:  a live line graph of the connected network's RSSI, noise,
 ///     and transmit rate over the past five minutes.
+///   - History: a visual report of connection reliability over the past
+///     24h / 7d / 30d, with an Export PDF button.
 struct NetworkInsightsView: View {
     @ObservedObject var model: NetworkInsightsModel
+    @ObservedObject var historyModel: ConnectionHistoryModel
     @State private var selectedTab: Tab = .scanner
 
     enum Tab: String, CaseIterable, Identifiable {
         case scanner = "Nearby networks"
-        case signal = "Signal graph"
+        case signal  = "Signal graph"
+        case history = "Connection history"
         var id: String { rawValue }
     }
 
@@ -20,7 +24,7 @@ struct NetworkInsightsView: View {
         VStack(spacing: 0) {
             // Custom tab bar — looks more Apple-grade than the default Picker(.segmented).
             HStack(spacing: 4) {
-                ForEach(Tab.allCases) { tab in
+                ForEach(Array(Tab.allCases.enumerated()), id: \.element) { idx, tab in
                     Button {
                         selectedTab = tab
                     } label: {
@@ -35,22 +39,26 @@ struct NetworkInsightsView: View {
                             .foregroundColor(selectedTab == tab ? .primary : .secondary)
                     }
                     .buttonStyle(.plain)
+                    .keyboardShortcut(KeyEquivalent(Character("\(idx + 1)")), modifiers: .command)
                 }
                 Spacer()
-                Button {
-                    model.startScan()
-                } label: {
-                    HStack(spacing: 6) {
-                        if model.isScanning {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
+                // Rescan only applies to the Scanner tab.
+                if selectedTab == .scanner {
+                    Button {
+                        model.startScan()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if model.isScanning {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            Text(model.isScanning ? "Scanning…" : "Rescan")
                         }
-                        Text(model.isScanning ? "Scanning…" : "Rescan")
                     }
+                    .disabled(model.isScanning)
+                    .controlSize(.small)
                 }
-                .disabled(model.isScanning)
-                .controlSize(.small)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -61,12 +69,13 @@ struct NetworkInsightsView: View {
                 switch selectedTab {
                 case .scanner: NearbyNetworksList(model: model)
                 case .signal:  SignalGraphPane(model: model)
+                case .history: ConnectionHistoryView(model: historyModel)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(NSColor.windowBackgroundColor))
         }
-        .frame(minWidth: 760, minHeight: 460)
+        .frame(minWidth: 820, minHeight: 540)
     }
 }
 
@@ -285,11 +294,12 @@ private struct SignalGraphPane: View {
                 }
                 .chartYScale(domain: -100...(-20))
                 .chartYAxis {
-                    AxisMarks(values: [-100, -80, -60, -40, -20]) { v in
+                    AxisMarks(position: .leading, values: [-100, -80, -60, -40, -20]) { v in
                         AxisGridLine()
                         AxisValueLabel {
                             if let n = v.as(Int.self) {
-                                Text("\(n) dBm").font(.system(size: 9))
+                                Text("\(n)").font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
@@ -297,10 +307,12 @@ private struct SignalGraphPane: View {
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { v in
                         AxisGridLine()
-                        AxisValueLabel(format: .dateTime.hour().minute())
+                        AxisValueLabel(format: .dateTime.hour().minute().second())
                     }
                 }
-                .padding(16)
+                .padding(.leading, 36)
+                .padding(.trailing, 16)
+                .padding(.vertical, 16)
             }
         }
     }
@@ -340,6 +352,8 @@ final class NetworkInsightsModel: ObservableObject {
             self.networks = self.scanner.lastResults
             self.scanError = self.scanner.lastScanError
             self.isScanning = false
+            // Refresh in case the user roamed networks since the window opened.
+            self.connectedSSID = self.getCurrentState().ssid
         }
         sampleStore.onSampleAdded = { [weak self] _ in
             guard let self else { return }

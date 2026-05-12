@@ -1,9 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// Owns the "Nearby Networks" window: scanner table + live signal graph.
-/// Standard menu-bar-app pattern — opens a real NSWindow when the user
-/// clicks the menu item, drops back to .accessory when closed.
+/// Owns the "Network Insights" window: scanner table + live signal graph
+/// + connection-history report. Standard menu-bar-app pattern — opens a
+/// real NSWindow when the user clicks the menu item, drops back to
+/// .accessory when closed.
 ///
 /// Sample collection runs ONLY while the window is open. Closing the
 /// window stops the 1 Hz polling timer immediately.
@@ -12,9 +13,13 @@ final class NetworkInsightsController: NSObject {
     private let scanner = NetworkScanner()
     private let sampleStore = SignalSampleStore()
     private var model: NetworkInsightsModel!
+    private var historyModel: ConnectionHistoryModel!
     private let getCurrentState: () -> WiFiState
 
-    init(getCurrentState: @escaping () -> WiFiState) {
+    init(
+        eventLog: EventLog,
+        getCurrentState: @escaping () -> WiFiState
+    ) {
         self.getCurrentState = getCurrentState
         super.init()
         self.model = NetworkInsightsModel(
@@ -22,6 +27,11 @@ final class NetworkInsightsController: NSObject {
             sampleStore: sampleStore,
             getCurrentState: getCurrentState
         )
+        let historyService = ConnectionHistoryService(eventLog: eventLog)
+        self.historyModel = ConnectionHistoryModel(service: historyService)
+        self.historyModel.onExportPDF = { [weak self] report in
+            self?.exportPDF(report: report)
+        }
     }
 
     func show() {
@@ -31,16 +41,16 @@ final class NetworkInsightsController: NSObject {
             return
         }
 
-        let view = NetworkInsightsView(model: model)
+        let view = NetworkInsightsView(model: model, historyModel: historyModel)
         let hosting = NSHostingController(rootView: view)
 
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 840, height: 540),
+            contentRect: NSRect(x: 0, y: 0, width: 880, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        win.title = "Nearby Networks"
+        win.title = "Network Insights"
         win.titlebarAppearsTransparent = true
         win.toolbarStyle = .unified
         win.contentViewController = hosting
@@ -55,9 +65,58 @@ final class NetworkInsightsController: NSObject {
         win.makeKeyAndOrderFront(nil)
 
         // Kick off the first scan + start graph sampling immediately so
-        // both tabs have content when the user first inspects them.
+        // both tabs have content when the user first inspects them. The
+        // history tab pulls from the EventLog on demand — no warm-up
+        // needed.
         model.startScan()
         model.startGraphSampling()
+        historyModel.refresh()
+    }
+
+    // MARK: - PDF Export
+
+    private func exportPDF(report: ConnectionHistoryReport) {
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.nameFieldStringValue = defaultPDFFilename(for: report)
+        savePanel.canCreateDirectories = true
+        savePanel.title = "Export Connection Report"
+        savePanel.message = "Save the connection report as a PDF you can send to your ISP."
+
+        guard let win = window else { return }
+
+        savePanel.beginSheetModal(for: win) { response in
+            guard response == .OK, let url = savePanel.url else { return }
+            // beginSheetModal completion fires on the main thread; assert it
+            // explicitly so the @MainActor renderer is callable without a hop.
+            let success = MainActor.assumeIsolated {
+                renderHistoryReportPDF(report, to: url)
+            }
+            if !success {
+                let alert = NSAlert()
+                alert.messageText = "Couldn't save the PDF"
+                alert.informativeText = "SignalDrop couldn't write to \(url.lastPathComponent). Try a different location."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+                return
+            }
+            // Reveal in Finder so the user sees what they just produced.
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+
+    private func defaultPDFFilename(for report: ConnectionHistoryReport) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        let date = f.string(from: report.periodEnd)
+        let suffix: String
+        switch report.period {
+        case .h24: suffix = "24h"
+        case .d7:  suffix = "7d"
+        case .d30: suffix = "30d"
+        }
+        return "SignalDrop Receipt — \(suffix) — \(date).pdf"
     }
 
     private func finish() {

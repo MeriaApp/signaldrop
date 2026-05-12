@@ -73,3 +73,56 @@ promoted on the landing page (Strategy A = App-Store-only marketing).
 
 **Next session recommendation:**
 After 1.0.2 ships through review (5-10 days), the priority is: (a) start v1.1 feature work (nearby network scanner + real-time signal graphs — the two highest-leverage roadmap features that justify the $7.99 price bump); (b) verify Google Search Console + start tracking actual search performance data; (c) send press outreach in waves of 2-3 per day.
+
+---
+
+### 2026-05-11 21:30 — v1.1 feature complete + adversarial polish audit handed off
+
+**Shipped tonight (since the 19:50 entry):**
+- **Network Insights window with 3 tabs** (`Sources/SignalDrop/NetworkInsightsView.swift` + `NetworkInsightsController.swift`):
+  - Scanner: live CoreWLAN scan with signal bars, BSSID, band, channel/width, security
+  - Signal Graph: live 1Hz RSSI / Noise / TX rate via Swift Charts. Axis polish (Y-axis labels visible at leading edge, X-axis seconds-format to avoid duplicate minute labels). Tab keyboard shortcuts ⌘1/⌘2/⌘3.
+  - Connection History (new in this session): 24h / 7d / 30d segmented period picker → summary card (A-F grade + uptime% + outage count + total down + longest), 24/28/30-bucket timeline strip with green/yellow/orange/red severity coding, **per-network rollup** (icon + SSID + avg/longest sublabels + drop count + total down OR "rock solid"), outages table.
+- **PDF "ISP-ready receipt" export** (`ConnectionHistoryPDF.swift`): SwiftUI ImageRenderer → CGContext PDF. Single-page 612pt wide. Brand header + machine info + summary card + timeline + per-network + outages table (capped 40 rows) + footer. Verified end-to-end with real-data 7d export at `test-artifacts/SignalDrop Receipt 7d with per-network.pdf.pdf`. ⌘E shortcut. NSSavePanel + reveal-in-Finder on save.
+- **Notification Settings window** (`SettingsView.swift` + `SettingsController.swift` + `NotificationSettings.swift`): 9 per-event-type toggles (sane defaults: ON for disconnects / weak signal / internet unreachable; OFF for the rest), **min disconnect duration slider (0-60s, default 5s)** with phantom-drop suppression logic in SignalDropApp, **quiet hours toggle + From/To hour pickers** (disconnect + internet-lost override as critical events), unified sound toggle. ⌘, shortcut.
+- **Phantom-drop suppression mechanism in SignalDropApp**: disconnect events still log immediately (data integrity → History tab) but the user-facing notification is DEFERRED via `pendingDisconnectTimer` for `minDisconnectDurationSeconds`. If a reconnect arrives before the timer fires, both notifications are cancelled. This is the highest-leverage UX fix in the category — kills the #1 complaint of disconnect-notifier apps ("too many alerts for things that aren't real outages").
+- **Refactored notification path**: handleEvent → scheduleDeferredDisconnectNotification → sendNotification. Settings.shouldNotify checks per-event-type + quiet-hours gating, with `isCritical` override for disconnect + internet-lost.
+
+**Verification:**
+- All UI surfaces verified end-to-end via real app, real WiFi, real EventLog data. Container DB seeded with 40 historical events (shifted to recent) for visible History tab testing.
+- Six audit screenshots captured at `test-artifacts/audit/` (menubar, menu open, 3 tabs, settings).
+- PDF rendered + viewed via sips conversion. Layout clean: header, summary, timeline, per-network 4-row, outages 4-row, footer.
+
+**Then ran an adversarial polish audit on the whole v1.1 surface.** Per Jesse's directive: "make sure that the features that we have are ultimately the best in class, that no other app is doing it better than we are, that our app is the absolute best in the world at what it provides for users." Output: 24 findings, 3 severity tiers, full code-location pointers and fix patterns. Doc at:
+
+**`audits/v1.1-polish-audit-2026-05-11.md`** — read before any polish work.
+
+The audit's Tier 1 + §2.9 bundle (6 items) is queued as Round 1 polish work for a fresh session:
+1. State-driven menu bar icon (currently static — biggest at-a-glance failure)
+2. Signal Graph Y-axis autoscale (currently fixed -100..-20)
+3. OUI vendor lookup in Scanner (BSSIDs are still hex)
+4. Menu cleanup (20+ items + duplicate Sound/Signal toggles vs Settings)
+5. Hover tooltip on Signal Graph
+6. Signal-degraded minimum duration (same pattern as disconnect threshold, applied to signal warnings)
+
+Handoff prompt for fresh session: **`prompts/handoff-v1.1-polish-round1-2026-05-11.md`**.
+
+**Why we're not submitting v1.1 yet:**
+1.0.2 is WAITING_FOR_REVIEW. Strategy per Jesse: keep building polish + tier-2/3 audit items, then submit v1.1 as a consolidated bump (cancel + replace 1.0.2). Avoids back-to-back review cycles.
+
+**What surprised tonight:**
+- Two events.db locations (sandboxed Debug reads from `~/Library/Containers/...`, not `~/Library/Application Support/SignalDrop/`). Trip-up for any future session trying to inspect EventLog state. Saved as memory.
+- SwiftUI custom controls (Picker, custom tab buttons, custom toggle buttons in Signal Graph) fail AppleScript/System Events accessibility hierarchy queries. Use keyboard shortcuts or coordinate clicks for automation.
+- ImageRenderer + Swift Charts works cleanly for PDF rendering; Swift Charts overlays SVG-like vector marks via `render { size, drawCallback in ... }` → CGContext callback that writes valid PDF.
+- A Picker with 3 options becomes a much cleaner segmented control when the count is small. Initial dropdown felt heavy; segmented matches Apple's pattern for "of these N choices, pick one."
+
+**Outstanding before v1.1 submission:**
+- Execute Round 1 polish (6 items, ~90 min) in fresh session
+- Optionally Round 2 (5 more items) + Round 3 (final smoothing)
+- Bump `MARKETING_VERSION` in `project.yml` to `1.1.0`
+- "What's New" copy for v1.1
+- Cancel WAITING_FOR_REVIEW v1.0.2 in ASC (set canceled:true via reviewSubmissions PATCH)
+- Archive + upload + new reviewSubmission for v1.1 via ASC API
+
+**Next session recommendation:**
+Open the handoff prompt at `prompts/handoff-v1.1-polish-round1-2026-05-11.md`, read the audit doc it references, execute the 6-item polish round.
