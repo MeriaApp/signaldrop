@@ -259,3 +259,66 @@ After Round 2/3 shipped + staged, Jesse asked for explicit sign-off that "every 
 **Jesse's instruction for the next session is explicit:** if 1.0.2 still WAITING_FOR_REVIEW → cancel + replace. If flipped to IN_REVIEW → do not touch, hold 1.1.0 staged until 1.0.2 completes.
 
 **Memory files added this session:** `feedback_decline_100_flawless_signoff_drive_evidence_pass.md`, `feedback_macos_status_bar_app_cannot_be_brought_frontmost_via_osascript.md`, `reference_tier_a_b_c_d_signoff_scorecard_pattern.md`.
+
+---
+
+### 2026-05-12 00:35 — adversarial pre-launch pass surfaced 5 real bugs, all fixed (commit 5418100)
+
+**Picked up the handoff at `prompts/handoff-v1.1-final-refinement-2026-05-12.md`.** Verified context (CONTEXT_STATE + audit + What's New + 18 verification screenshots), built clean (App Store target, 1.1.0 build 6, no Sparkle link, 1.1 MB OUI bundle), and queried ASC: v1.0.2 still WAITING_FOR_REVIEW, RS `ab1a06cd-…` submitted 2026-05-11 22:50 UTC; stale RS `7e5de1f5-…` (READY_FOR_REVIEW, never submitted) found and queued for cleanup at submit time.
+
+**Marketing site finding:** `signaldrop.app` is occupied by another product ("The Drop" startup-funding tracker — confirmed via curl). Our marketing site lives at `jessemeria.com/signaldrop/` (per the prior session's `ace`-domain choice). The landing page still calls v1.1 features "planned" at lines 86 + 643 + 650 + 701 of `~/Developer/jessemeria.com/signaldrop/index.html`. Marketing-site refresh queued for after v1.1 lands in review.
+
+**Spawned a `general-purpose` (Sonnet 4.6) adversarial agent** with the full read list + adversarial framing + cap-with-zero-allowed + quote-verbatim + confidence-and-blindspots clauses (per `top-tier-agents-only.md`). Returned 5 findings. **All 5 fact-checked at primary source against `~/Developer/dropout/Sources/SignalDrop/*.swift`.** All 5 were real.
+
+**Findings (all shipped in commit `5418100`):**
+
+- **F1 — Wi-Fi 6E band classification broken (Showstopper).**
+  `NetworkScanner.swift:34-41` `ChannelBand.from(channel: Int)` had an unreachable third case (`1...233` after `1...14`) AND was inferring band from a `channelNumber` that 6 GHz reuses (1, 5, 9, 13...). Every 6 GHz Wi-Fi 6E network was being silently classified as 2.4 GHz; the marketed v1.1 band filter was broken on every M-series Mac. **Fix:** switched to `CWWLANChannel.channelBand` which Apple discriminates at scan time. New memory: `reference_corewlan_channel_band_vs_channel_number.md`.
+
+- **F2 — Phantom drops wrecked the History grade (Showstopper).**
+  Phantom-drop suppression in v1.1 only filtered the user-facing notification; `eventLog.log(enriched)` at `SignalDropApp.swift:221` always logged the disconnect BEFORE the deferral timer ran, and the History tab's `reconstructOutages` + `scoreFromOutages` then walked every disconnect→connect pair at -8 each. A coworking-space user roaming 12 times would get the promised silence and then Grade F in the same app. **Fix:** threaded `NotificationSettings` into both `ConnectionHistoryService` and `ConnectionQuality`; their reconstruct/computeDowntime/realDisconnectsAboveThreshold paths now filter pairs shorter than `minDisconnectDurationSeconds`. Added `filteredBriefRoamCount` + `filterThresholdSeconds` to `ConnectionHistoryReport`, and a `FilteredBriefRoamsFootnote` view that surfaces "N brief roams under T seconds filtered — same threshold as notifications" so the user understands why raw vs. cooked diverge. Raw events stay in the log for the ISP receipt.
+
+- **F3 — Onboarding tips referenced removed UI (High-value polish).**
+  `OnboardingView.swift:165,167` named "WiFi-arc icon" (v1.0 glyph; v1.1 is state-driven) and "Generate ISP Report" (menu item removed in v1.1 polish Round 1 commit `0ee67eb`). First-time user finishes onboarding and hunts for a button that doesn't exist. **Fix:** rewrote four tips to match v1.1.
+
+- **F4 — Quiet Hours bypassed for disconnects (Jesse-approved design flip).**
+  `SignalDropApp.swift:280-281` + `NotificationSettings.shouldNotify(isCritical:)` hardcoded disconnect + internetLost as critical, bypassing Quiet Hours and firing `.defaultCritical` sound. Settings copy at `SettingsView.swift:100-101` literally advertised the behavior. A user with Quiet Hours 10pm→7am would still wake up to 3am cable-modem-reset notifications. Jesse picked the flip option: **Quiet Hours uniformly silences every category** (aligns with macOS Focus semantics). Dropped `isCritical` parameter, dropped `critical: true` on disconnect notification, updated Settings copy: *"Every notification is silenced during this window — disconnects and internet-lost included. Outages still log to Connection History and the ISP receipt; SignalDrop just leaves you alone."*
+
+- **F5 — 5s throttle silenced legitimate back-to-back drops (Smoothing).**
+  `SignalDropApp.swift:53-55` carried a 5s throttle on `.disconnected` + `.connected` from before phantom-drop deferral existed. With deferral handling the spam case, the throttle would silence the second of two real outages 2s apart (a thrashing modem). **Fix:** removed those two entries from `throttleIntervals`. Other event types keep their throttles.
+
+**Verification done:**
+- `xcodebuild` Release SignalDrop clean build green; SignalDropDirect Release clean build green; both at 1.1.0 build 6.
+- App Store binary verified: `otool -L` has no Sparkle linker references; OUI bundle 1.1 MB present; signed with Apple Development cert.
+- Hit the dual-target Build/Products/Release collision once (SignalDropDirect overwrote the App Store binary at the standard Release path); resolved by `mv`ing the conflict into `/tmp/dropout-build-snapshot-*` and clean-rebuilding SignalDrop. New memory: `feedback_xcodegen_dual_target_release_dir_collision.md`.
+- Killed the stale Debug PID 17230 (pre-fix code); launched the new Release build (PID 44374); confirmed process is alive + no recent crash reports + no console errors.
+
+**ASC review notes for v1.1** drafted in `AppStore/whats-new-1.1.0.md` under a new "v1.1 ASC Review Notes" section. The current v1.0.2 notes describe the removed "Show Welcome…" menu item and don't mention any v1.1 surface — they MUST be replaced at submit time.
+
+**What's New v1.1 copy refined** in same file: removed the "isCritical bypass" framing; phantom-drop-suppression bullet now says "across notifications, your reliability grade, and the per-network rollup"; Quiet Hours bullet now says "silence everything during the window — disconnects and internet-lost included."
+
+**Verification deferred (still requires Jesse's hardware):**
+- Tier C — every physical state transition (WiFi off→`wifi.slash`, internet unreachable→`wifi.exclamationmark`, USB tether mode, Location denied→`lock.icloud`, sleep/wake, real disconnect+History+notification path, phantom-drop suppression at the 5s threshold, Quiet Hours wrap-around, per-event toggle persistence, sound toggle, Sparkle SignalDropDirect update flow, VoiceOver rotor walk).
+- Cold-start onboarding flow (Jesse picked "skip" — happens during Tier C).
+- Pre-submit visual audit on smallest supported Mac display.
+
+**Marketing-site refresh queued for after launch:**
+- `~/Developer/jessemeria.com/signaldrop/index.html` lines 86 + 643 + 650 + 701 still call v1.1 features "planned." Should refresh after v1.1 lands in review so the marketing copy + ASC listing land at the same time.
+- Privacy policy at `/signaldrop/privacy` says effective March 26 2026 + events.db path is wrong for sandboxed App Store build + doesn't mention v1.1 surfaces (PDF export, OUI bundle). Refresh queued.
+- Press outreach drafts at `MARKETING/PRESS_OUTREACH_DRAFTS.md` still reference 1.0.2 features — defer refresh until v1.1 is LIVE.
+
+**Outstanding (Jesse-gated):**
+1. **Tier C walks** — Jesse runs through the 12 physical-state surfaces above; the new Release SignalDrop.app at `~/Library/Developer/Xcode/DerivedData/SignalDrop-*/Build/Products/Release/SignalDrop.app` is ready.
+2. **v1.1 submission** — when Jesse approves:
+   - PATCH RS `ab1a06cd-…` with `canceled: true` (only if still WAITING_FOR_REVIEW; if state has flipped to IN_REVIEW, hold 1.1.0 staged).
+   - Investigate + clean up stale RS `7e5de1f5-…`.
+   - Archive + upload 1.1.0 build 6 via `xcodebuild archive` + altool.
+   - Create new RS with the 3-step pattern, `releaseType=AFTER_APPROVAL`.
+   - Replace ASC review notes with the v1.1 block in `AppStore/whats-new-1.1.0.md`.
+3. After v1.1 lands LIVE: marketing-site refresh, privacy policy update, press outreach refresh + send.
+4. Tag `v1.1.0` annotated on the commit when v1.1 hits ASC.
+
+**Memory files added this session:**
+- `project_signaldrop_v1_1_adversarial_pass_2026_05_12.md` (durable: pattern + findings + commit ID)
+- `reference_corewlan_channel_band_vs_channel_number.md` (durable: Wi-Fi 6E gotcha for every macOS app)
+- `feedback_xcodegen_dual_target_release_dir_collision.md` (durable: dual-target binary verification rule)
