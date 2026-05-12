@@ -371,3 +371,56 @@ Jesse instructed "Continue all the way through." That was sign-off for the full 
 - `feedback_xcodegen_dual_target_release_dir_collision.md`
 - `project_signaldrop_v1_1_0_submitted_2026_05_12.md` (next: durable submission record)
 - `reference_asc_uses_non_exempt_encryption_null_blocks_review.md` (next: submission gotcha)
+
+---
+
+### 2026-05-12 00:55 EDT — live SignalDrop docs hardened for Apple 5.1.1 + 2.3.1 compliance
+
+After submit Jesse asked: *"make sure that our privacy policy and any other documents that are already live meet iOS standards so that we don't get rejected and make sure that they are live and proper."*
+
+Audited every page linked from ASC + every public SignalDrop URL at `jessemeria.com/signaldrop/`. Found rejection-grade problems on multiple pages.
+
+**Shipped (jessemeria.com main `aa169e9`, deployed via wrangler Direct Upload):**
+
+- **privacy.html — full rewrite to 13-section Apple-grade template.** The old March-26 stub failed Guideline 5.1.1's three pillars (collection identification, third-party "same/equal protection" language, retention/deletion). New policy explicitly covers all three; literal Terminal commands to delete every artifact SignalDrop touches (UserDefaults + sandboxed container + Application Support); COPPA/GDPR/CCPA section trivial under "no data collected"; change-policy commitment with 30-day banner; visible contact email wrapped in `<!--email_off-->` markers so Cloudflare Scrape Shield doesn't auto-obfuscate it on `jesse@jessemeria.com`. Sandboxed events.db path now correctly documented for the Mac App Store build. Effective date May 12, 2026; previous policy referenced as covering 1.0.0–1.0.1.
+
+- **support.html — Apple 2.3.1 metadata-vs-binary cleanup.** Three stale UI references that promised buttons no longer in v1.1 (would have read as binary-mismatch to a reviewer): "Sound Alerts / Signal Warnings" menu toggles (moved to Settings ⌘,), "Generate ISP Report ⌘R" menu item (replaced by Connection History → Export PDF ⌘E), menu-bar-icon shape (state-driven v1.1 glyphs, not the v1.0 radiowaves). Plus Troubleshooting section + roadmap section updated for v1.1 reality.
+
+- **index.html (landing) — version + claims sync.** `softwareVersion` JSON-LD 1.0.2 → 1.1.0. Two "$4.99 ... planned: nearby network scanner in v1.1" claims flipped to "Version 1.1 (now) added the Network Insights window..." Comparison table v1.1 markers for scanner + signal graph flipped to ✓ shipped.
+
+- **press/index.html — location privacy + version sync.** "Charlevoix, Michigan" stripped from three boilerplate paragraphs per the cross-project privacy rule (was an active violation that had been live for months). Current version 1.0.2 → 1.1.0.
+
+- **llms.txt — feature list + privacy + email refresh.** Full v1.1 feature list, Charlevoix/Michigan location leak stripped, contact email switched `jrmeria@gmail.com` → `jesse@jessemeria.com` per brand-aligned-email rule, sandboxed events.db path documented.
+
+- **why-mac-wifi-drops/index.html — "planned in v1.1" → "shipped in v1.1".**
+
+**Why:**
+
+- Apple Guideline 5.1.1 cites three specific privacy-policy pillars that the old SignalDrop policy didn't formally cover. Even though SignalDrop genuinely collects zero data, Apple's reviewers + audit tools look for the three explicit pillars + the literal data-deletion mechanism. Rewriting now is cheap; addressing it after a rejection costs another submission cycle.
+- Apple Guideline 2.3.1 (metadata vs binary mismatch) lists "support documentation describing functionality the app doesn't have" as a rejection vector. The "Sound Alerts" / "Signal Warnings" / "Generate ISP Report" stale support copy would have been the smoking gun.
+- Cloudflare's automatic email obfuscation is invisible to JS-rendering browsers but blocks contact email from automated audits + non-JS scrapers. `<!--email_off-->` per-instance bypass is the cleanest workaround (avoids touching site-wide Cloudflare settings).
+- Location-privacy leak ("Charlevoix, Michigan") had been live on press kit for months. Caught now during the broader audit — falls under the cross-project rule against publishing location.
+
+**Live verification done:**
+All 6 URLs at `jessemeria.com/signaldrop/{privacy,support,press,llms.txt,why-mac-wifi-drops,index}` re-curled post-deploy. Apple 5.1.1 9-item checklist passes on the live privacy URL (visible contact email confirmed, all required sections present).
+
+**Outstanding (Jesse-gated, post-launch):**
+1. Mac App Store screenshots refresh — current shots are from 1.0.x and don't show Network Insights tabs. Generate new 2880×1800 shots for the listing.
+2. Press outreach send (drafts at `MARKETING/PRESS_OUTREACH_DRAFTS.md`) — wait until v1.1.0 is LIVE.
+3. Small Business Program enrollment (lifts net per sale $3.50 → $4.24; Jesse-only browser form).
+
+**Memory files added in this segment:**
+- `reference_apple_privacy_policy_guideline_5_1_1_template.md` — 13-section template reusable verbatim for every Meria iOS/macOS app's privacy URL, plus the Cloudflare obfuscation bypass.
+
+---
+
+### 2026-05-12 01:00 EDT — closeout
+
+Three batched sessions today (adversarial pass → submission → docs hardening) all landed on the same calendar day. Git state final:
+- `MeriaApp/signaldrop:main` at `238f13a`, pushed. Tag `v1.1.0` pushed to remote.
+- `MeriaApp/jessemeria.com:main` at `aa169e9`, pushed. Two pre-existing untracked blog drafts (`ai-is-the-new-plumbing.html`, `content-ideas.md`) left in `blog/drafts/` — not from this session.
+- 811 loose screenshots filed to `~/Developer/screenshots/_used/`.
+- 6 new memory files added this session (3 reference, 2 project, 1 feedback) + MEMORY.md indexed.
+- Temp build-snapshot at `/tmp/dropout-build-snapshot-1778559976/` (from SignalDrop/SignalDropDirect Release collision) — left in `/tmp/`, OS clears on reboot.
+
+**Next session recommendation:** monitor ASC for the v1.1.0 review verdict (5-10 business days typical for paid Mac App Store). Don't refresh marketing screenshots / send press / refresh blog content until v1.1.0 is LIVE — those want to land together so search engines + AI crawlers see consistent v1.1 messaging across ASC + site + press signals on the same day.
