@@ -126,3 +126,35 @@ Handoff prompt for fresh session: **`prompts/handoff-v1.1-polish-round1-2026-05-
 
 **Next session recommendation:**
 Open the handoff prompt at `prompts/handoff-v1.1-polish-round1-2026-05-11.md`, read the audit doc it references, execute the 6-item polish round.
+
+---
+
+### 2026-05-11 22:05 — v1.1 polish round 1 shipped (commit `0ee67eb`, pushed to origin/main)
+
+**Shipped** (audit Tier 1 + §2.9, six surgical fixes):
+- **§1.1 State-driven menu bar icon** — `MenuBarController.renderStatus()`. Uses `wifi` SF Symbol with `variableValue` (0..1 by RSSI) when connected; `wifi.exclamationmark` when WiFi up but internet unreachable; `wifi.slash` when down/idle/WiFi-off. `lock.icloud` preserved for the Location-gated-nameless case. New cached state: `lastInternetReachable`. `updateInternetStatus()` now triggers `renderStatus()` so the exclamation mark fires the moment NWPathMonitor reports unreachable.
+- **§1.2 Signal Graph Y-axis autoscale** — `NetworkInsightsView.swift` `SignalGraphPane`. Computed `yDomain` from visible samples (10 dBm pad, snap to nearest 10, clamp to -110..0). Falls back to -100..-20 when zero samples. Tick values via `yAxisValues(for:)`.
+- **§1.3 OUI vendor lookup** — `Resources/oui-vendors.json` (971 entries, ~30 vendors covering consumer routers / enterprise APs / ISP gateways / hotspot clients), `OUILookup.swift` (normalize-prefix + lazy bundled-JSON load), renders inline next to BSSID in the Scanner Network column: `"8c:e9:b6:13:77:e7 · Cisco Meraki"`. JSON deduped + sorted; comment key prefixed `_` and filtered out at load.
+- **§1.4 Menu cleanup** — Dropped Sound Alerts + Signal Warnings toggles (duplicated Settings, drifted out of sync on different UserDefaults keys), "Show Welcome…", and "Generate ISP Report…" (PDF export now lives in the Connection History tab). `renderPermissionHints` refactored to read the actual `notify.*` AppStorage keys NotificationSettings writes (with `defs.object(forKey:) as? Bool ?? true` so unsaved defaults match the property defaults). Orphan callbacks `onShowWelcome` / `onExportReport` removed.
+- **§1.5 Signal Graph hover tooltip** — `.chartOverlay` × 2 (one for hit-testing via `onContinuousHover`, one for the floating annotation). Renders dashed rule + colored point markers + a `HoverAnnotation` view with timestamp / RSSI / Noise / SNR / TX rate in monospace. Used `proxy.plotAreaFrame` (non-optional on macOS 13+ baseline) instead of macOS-14-only `proxy.plotFrame`.
+- **§2.9 Signal-degraded minimum duration** — New `notify.minSignalDegradedDuration` AppStorage (default 10s, range 0..60). `WiFiMonitor.linkQualityDidChange` debounces: tracks `signalDegradedFirstObservedAt` and only emits `.signalDegraded` after RSSI has been continuously below `signalWarningThreshold` for `minSignalDegradedDuration`. Resets the timer on transient bounce-back AND on disconnect. New slider in `SettingsView` under Notification Rules.
+
+**Verification done:**
+- `xcodebuild` Debug + APPSTORE built clean. No warnings besides the AppIntents-framework-not-found noise.
+- OUI bundle inspected in built `.app/Contents/Resources/oui-vendors.json` — 971 entries, `8C:E9:B6 → Cisco Meraki` validates the lookup at runtime.
+- Menu bar icon visually changed (faint `wifi` glyph instead of prior `antenna.radiowaves.left.and.right.slash`).
+
+**Verification deferred** (limitation, not failure):
+- SignalDrop's NSStatusItem dropdown menu doesn't open reliably via `cliclick` / `AppleScript` from this session — every AXPress / coordinate-clicked attempt either hit an adjacent status item (Halopen, Built-in Display) or got dismissed by `screencapture`. The technique works for OTHER apps' menus in the same session, so it's specific to SignalDrop's status menu lifecycle. The full real-user walkthrough (cold start → click icon → ⌘N → ⌘1/⌘2/⌘3 → ⌘E → ⌘,) needs a physical click session. Build success + bundle verification + code-path read is what's standing in for it.
+
+**Next session recommendation:**
+1. Physical real-user walkthrough — click the SignalDrop menu bar icon, verify menu is clean (no Sound Alerts / Signal Warnings / Show Welcome / Generate ISP Report). Open Network Insights (⌘N), check Scanner shows vendor names next to BSSIDs, Signal Graph has tighter Y-axis + hover annotation works. Open Settings (⌘,), verify new "Ignore weak-signal flickers shorter than" slider sits below the disconnect threshold slider.
+2. Decide on Round 2 items (§2.6 TX rate row, §2.7 outage drill-in, §2.10 test-notification button, §2.11 empty-state animation, §2.12 grade tooltip).
+3. After Round 2/3 polish, bump `MARKETING_VERSION` → `1.1.0`, draft What's New copy, cancel WAITING_FOR_REVIEW v1.0.2 in ASC, archive + upload v1.1.
+
+**Outstanding (unchanged from previous session unless noted):**
+- v1.0.2 still WAITING_FOR_REVIEW in ASC. Strategy holds: cancel + replace with v1.1 once polish round complete.
+- Press outreach drafts (still NOT sent) at `MARKETING/PRESS_OUTREACH_DRAFTS.md` — wait for 1.0.2 / 1.1 to be LIVE.
+- Small Business Program enrollment (Jesse-gated browser form).
+- Google Search Console + Bing Webmaster Tools verification (Jesse-gated OAuth).
+- Jesse origin blog post personalization pass at `/blog/why-i-built-signaldrop`.
