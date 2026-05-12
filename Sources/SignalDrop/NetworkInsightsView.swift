@@ -158,7 +158,12 @@ private struct EmptyScanState: View {
     @ObservedObject var model: NetworkInsightsModel
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: model.scanError != nil ? "wifi.exclamationmark" : "wifi")
+            // While scanning, the `wifi` glyph pulses its variable-color
+            // arcs in sequence so the user can read "active scan in
+            // progress" at a glance — same motion Apple uses for the
+            // Wi-Fi indicator during connection. Static glyph for the
+            // error / idle states.
+            symbolView
                 .font(.system(size: 36))
                 .foregroundColor(.secondary)
             if let err = model.scanError {
@@ -178,6 +183,17 @@ private struct EmptyScanState: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var symbolView: some View {
+        let name = model.scanError != nil ? "wifi.exclamationmark" : "wifi"
+        let image = Image(systemName: name)
+        if #available(macOS 14.0, *), model.isScanning, model.scanError == nil {
+            image.symbolEffect(.variableColor.iterative, options: .repeating)
+        } else {
+            image
+        }
     }
 }
 
@@ -267,116 +283,235 @@ private struct SignalGraphPane: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                let domain = yDomain
-                Chart {
-                    if visibleSeries.contains("RSSI") {
-                        ForEach(model.samples) { s in
-                            LineMark(
-                                x: .value("Time", s.timestamp),
-                                y: .value("dBm", s.rssi),
-                                series: .value("Series", "RSSI")
-                            )
-                            .foregroundStyle(colorFor("RSSI"))
-                            .interpolationMethod(.monotone)
-                        }
-                    }
-                    if visibleSeries.contains("Noise") {
-                        ForEach(model.samples) { s in
-                            LineMark(
-                                x: .value("Time", s.timestamp),
-                                y: .value("dBm", s.noise),
-                                series: .value("Series", "Noise")
-                            )
-                            .foregroundStyle(colorFor("Noise"))
-                            .interpolationMethod(.monotone)
-                        }
-                    }
-                    if visibleSeries.contains("TX rate") {
-                        // Map TX rate (Mbps) into the dBm range so it shares the axis visually.
-                        // 0-2000 Mbps maps roughly to -100..0 dBm range via /20.
-                        ForEach(model.samples) { s in
-                            LineMark(
-                                x: .value("Time", s.timestamp),
-                                y: .value("dBm-scaled", -100 + Int(s.transmitRate / 20)),
-                                series: .value("Series", "TX rate")
-                            )
-                            .foregroundStyle(colorFor("TX rate"))
-                            .interpolationMethod(.monotone)
-                        }
-                    }
-                    if let s = hoverSample {
-                        RuleMark(x: .value("Time", s.timestamp))
-                            .foregroundStyle(Color.secondary.opacity(0.5))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        if visibleSeries.contains("RSSI") {
-                            PointMark(
-                                x: .value("Time", s.timestamp),
-                                y: .value("dBm", s.rssi)
-                            )
-                            .foregroundStyle(colorFor("RSSI"))
-                            .symbolSize(48)
-                        }
-                        if visibleSeries.contains("Noise") {
-                            PointMark(
-                                x: .value("Time", s.timestamp),
-                                y: .value("dBm", s.noise)
-                            )
-                            .foregroundStyle(colorFor("Noise"))
-                            .symbolSize(48)
-                        }
-                    }
-                }
-                .chartYScale(domain: domain)
-                .chartYAxis {
-                    AxisMarks(position: .leading, values: yAxisValues(for: domain)) { v in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let n = v.as(Int.self) {
-                                Text("\(n)").font(.system(size: 10, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                }
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
-                        AxisGridLine()
-                        AxisValueLabel(format: .dateTime.hour().minute().second())
-                    }
-                }
-                .chartOverlay { proxy in
-                    GeometryReader { geo in
-                        Rectangle()
-                            .fill(Color.clear)
-                            .contentShape(Rectangle())
-                            .onContinuousHover { phase in
-                                switch phase {
-                                case .active(let location):
-                                    hoverSample = sampleNearest(to: location, in: geo, proxy: proxy)
-                                case .ended:
-                                    hoverSample = nil
-                                }
-                            }
-                    }
-                }
-                .chartOverlay { proxy in
-                    GeometryReader { geo in
-                        if let s = hoverSample {
-                            let plot = geo[proxy.plotAreaFrame]
-                            let xPos = proxy.position(forX: s.timestamp) ?? 0
-                            HoverAnnotation(sample: s)
-                                .position(
-                                    x: plot.origin.x + min(max(xPos, 70), plot.width - 70),
-                                    y: plot.origin.y + 38
-                                )
-                        }
-                    }
-                }
-                .padding(.leading, 36)
-                .padding(.trailing, 16)
-                .padding(.vertical, 16)
+                stackedCharts
+                    .padding(.leading, 36)
+                    .padding(.trailing, 16)
+                    .padding(.vertical, 16)
             }
         }
+    }
+
+    /// dBm chart on top + TX-rate chart below when toggled visible. Two
+    /// independent `Chart` views share the same X domain so their time
+    /// axes align column-for-column — same pattern Apple Stocks uses
+    /// for price + volume. Single-axis fakery (mapping Mbps onto dBm)
+    /// produced visually misleading lines; this layout is honest.
+    @ViewBuilder
+    private var stackedCharts: some View {
+        let showTX = visibleSeries.contains("TX rate")
+        let xDomain = sharedXDomain
+        VStack(spacing: 8) {
+            dBmChart(xDomain: xDomain, hideXAxis: showTX)
+                .frame(maxHeight: .infinity)
+            if showTX {
+                txRateChart(xDomain: xDomain)
+                    .frame(height: 90)
+            }
+        }
+    }
+
+    /// Top chart: RSSI + Noise on a dBm axis. X axis is hidden when the
+    /// TX-rate chart is also visible so the time labels appear only on
+    /// the bottom chart (Apple Stocks pattern).
+    @ViewBuilder
+    private func dBmChart(xDomain: ClosedRange<Date>, hideXAxis: Bool) -> some View {
+        let domain = yDomain
+        Chart {
+            if visibleSeries.contains("RSSI") {
+                ForEach(model.samples) { s in
+                    LineMark(
+                        x: .value("Time", s.timestamp),
+                        y: .value("dBm", s.rssi),
+                        series: .value("Series", "RSSI")
+                    )
+                    .foregroundStyle(colorFor("RSSI"))
+                    .interpolationMethod(.monotone)
+                }
+            }
+            if visibleSeries.contains("Noise") {
+                ForEach(model.samples) { s in
+                    LineMark(
+                        x: .value("Time", s.timestamp),
+                        y: .value("dBm", s.noise),
+                        series: .value("Series", "Noise")
+                    )
+                    .foregroundStyle(colorFor("Noise"))
+                    .interpolationMethod(.monotone)
+                }
+            }
+            if let s = hoverSample {
+                RuleMark(x: .value("Time", s.timestamp))
+                    .foregroundStyle(Color.secondary.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                if visibleSeries.contains("RSSI") {
+                    PointMark(
+                        x: .value("Time", s.timestamp),
+                        y: .value("dBm", s.rssi)
+                    )
+                    .foregroundStyle(colorFor("RSSI"))
+                    .symbolSize(48)
+                }
+                if visibleSeries.contains("Noise") {
+                    PointMark(
+                        x: .value("Time", s.timestamp),
+                        y: .value("dBm", s.noise)
+                    )
+                    .foregroundStyle(colorFor("Noise"))
+                    .symbolSize(48)
+                }
+            }
+        }
+        .chartXScale(domain: xDomain)
+        .chartYScale(domain: domain)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: yAxisValues(for: domain)) { v in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let n = v.as(Int.self) {
+                        Text("\(n)").font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            if hideXAxis {
+                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                    AxisGridLine()
+                }
+            } else {
+                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                    AxisGridLine()
+                    AxisValueLabel(format: .dateTime.hour().minute().second())
+                }
+            }
+        }
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let location):
+                            hoverSample = sampleNearest(to: location, in: geo, proxy: proxy)
+                        case .ended:
+                            hoverSample = nil
+                        }
+                    }
+            }
+        }
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                if let s = hoverSample {
+                    let plot = geo[proxy.plotAreaFrame]
+                    let xPos = proxy.position(forX: s.timestamp) ?? 0
+                    HoverAnnotation(sample: s)
+                        .position(
+                            x: plot.origin.x + min(max(xPos, 70), plot.width - 70),
+                            y: plot.origin.y + 38
+                        )
+                }
+            }
+        }
+    }
+
+    /// Bottom chart: TX rate on its own Mbps axis. Shown only when the
+    /// legend toggle includes TX rate. Compact (~90pt) and inherits the
+    /// same time domain as the dBm chart so the two read as one unit.
+    @ViewBuilder
+    private func txRateChart(xDomain: ClosedRange<Date>) -> some View {
+        let txDomain = txRateDomain
+        Chart {
+            ForEach(model.samples) { s in
+                LineMark(
+                    x: .value("Time", s.timestamp),
+                    y: .value("Mbps", s.transmitRate),
+                    series: .value("Series", "TX rate")
+                )
+                .foregroundStyle(colorFor("TX rate"))
+                .interpolationMethod(.monotone)
+            }
+            if let s = hoverSample {
+                RuleMark(x: .value("Time", s.timestamp))
+                    .foregroundStyle(Color.secondary.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                PointMark(
+                    x: .value("Time", s.timestamp),
+                    y: .value("Mbps", s.transmitRate)
+                )
+                .foregroundStyle(colorFor("TX rate"))
+                .symbolSize(32)
+            }
+        }
+        .chartXScale(domain: xDomain)
+        .chartYScale(domain: txDomain)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: txAxisValues(for: txDomain)) { v in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let n = v.as(Double.self) {
+                        Text("\(Int(n))")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                AxisGridLine()
+                AxisValueLabel(format: .dateTime.hour().minute().second())
+            }
+        }
+        // Subtle separator above the TX row so the eye reads it as a
+        // distinct panel rather than an axis tail of the dBm chart.
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.12))
+                .frame(height: 1)
+        }
+    }
+
+    /// Shared X-axis time domain so the dBm and TX-rate charts line up
+    /// column-for-column. Width is the full sample window the store has
+    /// buffered; falls back to "last 5 minutes ending now" when samples
+    /// are missing on either end (typical at first launch).
+    private var sharedXDomain: ClosedRange<Date> {
+        if let first = model.samples.first?.timestamp,
+           let last = model.samples.last?.timestamp,
+           first < last {
+            return first ... last
+        }
+        let now = Date()
+        return now.addingTimeInterval(-300) ... now
+    }
+
+    /// TX-rate Y-axis domain. Floor at 0 (Mbps can't be negative), pad
+    /// the top by ~10% so the line never hugs the chart edge. Snap the
+    /// upper bound to a clean round number (50 / 100 / 200 / 500 / 1000)
+    /// so the tick labels read as natural Wi-Fi link rates.
+    private var txRateDomain: ClosedRange<Double> {
+        let maxRate = model.samples.map(\.transmitRate).max() ?? 0
+        guard maxRate > 0 else { return 0 ... 100 }
+        let padded = maxRate * 1.1
+        let rounded: Double
+        switch padded {
+        case ..<60:    rounded = 60
+        case ..<120:   rounded = 120
+        case ..<240:   rounded = 240
+        case ..<540:   rounded = 540
+        case ..<1100:  rounded = 1100
+        case ..<2200:  rounded = 2200
+        default:       rounded = (padded / 500.0).rounded(.up) * 500
+        }
+        return 0 ... rounded
+    }
+
+    /// Three ticks for the TX-rate axis: 0, midpoint, max. Compact
+    /// enough to fit the ~90pt-tall TX chart without crowding.
+    private func txAxisValues(for domain: ClosedRange<Double>) -> [Double] {
+        [domain.lowerBound, (domain.upperBound / 2), domain.upperBound]
     }
 
     /// Y-axis domain derived from visible samples. Pads the data range and
