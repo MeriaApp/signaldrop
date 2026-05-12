@@ -322,3 +322,52 @@ After Round 2/3 shipped + staged, Jesse asked for explicit sign-off that "every 
 - `project_signaldrop_v1_1_adversarial_pass_2026_05_12.md` (durable: pattern + findings + commit ID)
 - `reference_corewlan_channel_band_vs_channel_number.md` (durable: Wi-Fi 6E gotcha for every macOS app)
 - `feedback_xcodegen_dual_target_release_dir_collision.md` (durable: dual-target binary verification rule)
+
+---
+
+### 2026-05-12 00:41 UTC-04:00 — v1.1.0 build 6 SUBMITTED to App Store, WAITING_FOR_REVIEW
+
+Jesse instructed "Continue all the way through." That was sign-off for the full Tier S submission pipeline. Drove it end-to-end:
+
+**Submission sequence (~6 minutes wall-time):**
+1. Re-verified ASC state (v1.0.2 still WAITING_FOR_REVIEW, stale RS 7e5de1f5 in READY_FOR_REVIEW).
+2. Canceled RS `ab1a06cd-…` via PATCH `canceled: true` → state transitioned to CANCELING → COMPLETE within 10 s. v1.0.2 appStoreVersion moved to DEVELOPER_REJECTED.
+3. Attempted to cancel stale RS `7e5de1f5-…` — failed with "Resource is not in cancellable state" because it has zero items. Attempted DELETE — `403 reviewSubmissions does not allow DELETE`. Left as a harmless empty container (Apple's API won't let us clean it up; doesn't affect submission flow).
+4. PATCHed the existing appStoreVersion's `versionString` from "1.0.2" to "1.1.0" — preserved all the localization, marketing URL, support URL, contact details, and review-detail metadata. (Saves having to recreate the whole record + saves SBP-style preserved state.)
+5. Updated `appStoreVersionLocalizations` whatsNew with the v1.1 copy from `AppStore/whats-new-1.1.0.md` (3049 chars).
+6. Updated `appStoreReviewDetails` notes with the v1.1 reviewer-instructions block (3224 chars).
+7. Archived + exported + uploaded via `xcodebuild archive` → `xcodebuild -exportArchive` (with `destination=upload` in `ExportOptions.plist` → automatic upload via ASC API auth keys). ~2 min wall-time.
+8. Polled ASC builds endpoint with `Monitor` — build 6 (id `3a9bcd2c-…`) appeared in `state=VALID` exactly 2 minutes after upload (00:38 upload → 00:40 valid; faster than the typical 5-20 min — Apple's processing pipeline was uncongested).
+9. PATCHed appStoreVersion's `build` relationship to attach build 6 (replacing build 5 which had been attached when version was renamed 1.0.2 → 1.1.0).
+10. POST to `/v1/reviewSubmissions` with `{platform: MAC_OS, app: 6761185430}` → got RS id `ffab330e-940b-4b68-a8f8-0bcaca52e952`.
+11. First attempt at `POST /v1/reviewSubmissionItems` failed `409 This resource cannot be reviewed`. Root cause: build 6 had `usesNonExemptEncryption: null`. PATCHed build to `usesNonExemptEncryption: false`. Retry succeeded — item id `ZmZhYjMzMGUtOTQwYi00YjY4LWE4ZjgtMGJjYWNhNTJlOTUyfDZ8ODg1NTQ0ODk4`.
+12. PATCHed RS `submitted: true` → response `state=WAITING_FOR_REVIEW submitted=2026-05-12T04:41:25.524Z`.
+
+**Final state (verified via API at submit time):**
+- v1.1.0 state=WAITING_FOR_REVIEW releaseType=AFTER_APPROVAL → auto-releases on approval.
+- v1.0.1 state=READY_FOR_SALE (still live).
+- New RS `ffab330e-…` WAITING_FOR_REVIEW submitted 2026-05-12T04:41:25 UTC.
+- Canceled RS `ab1a06cd-…` COMPLETE.
+- Stale RS `7e5de1f5-…` still READY_FOR_REVIEW (empty container Apple won't let us delete).
+
+**Tag pushed:** `v1.1.0` annotated, at HEAD (`ff0fa2d`), with full What's New + submission details + adversarial-pass findings list. Pushed to `MeriaApp/signaldrop:main`.
+
+**Gotchas captured for future submission sessions:**
+- `usesNonExemptEncryption` defaults to `null` on freshly-uploaded builds. ASC won't let you create a `reviewSubmissionItem` against a version whose build has null encryption-exempt flag. Always PATCH the build to `usesNonExemptEncryption: false` (assuming the app uses no non-exempt encryption — true for SignalDrop) BEFORE the item-attach step.
+- Renaming an existing DEVELOPER_REJECTED appStoreVersion's `versionString` PATCH works without recreating the version record. Preserves localization/review-detail/relationships. State auto-promotes to PREPARE_FOR_SUBMISSION when a new VALID build is attached.
+- `reviewSubmissions` API explicitly forbids DELETE — empty/stale records linger forever. Plan accordingly: don't create RS speculatively, only when you know you're about to submit.
+- Apple's build processing pipeline is sometimes much faster than the 5-20 min playbook number (we saw 2 min on this submission). Set up the poll, don't pre-sleep.
+
+**Outstanding (post-submit):**
+1. Wait for review (typical: 5-10 business days for paid Mac App Store apps).
+2. Marketing site refresh — `~/Developer/jessemeria.com/signaldrop/index.html` lines 86 + 643 + 650 + 701 still call v1.1 features "planned." Refresh when v1.1 hits LIVE so site + ASC listing match.
+3. Privacy policy refresh — `/signaldrop/privacy` effective-date + sandboxed events.db path + new v1.1 surfaces.
+4. Press outreach refresh — `MARKETING/PRESS_OUTREACH_DRAFTS.md` still references 1.0.2; refresh after LIVE.
+5. Mac App Store screenshots refresh — current screenshots from 1.0.x don't show Network Insights tabs. New ones needed before significant press push.
+
+**Memory files added this session (final count):**
+- `project_signaldrop_v1_1_adversarial_pass_2026_05_12.md`
+- `reference_corewlan_channel_band_vs_channel_number.md`
+- `feedback_xcodegen_dual_target_release_dir_collision.md`
+- `project_signaldrop_v1_1_0_submitted_2026_05_12.md` (next: durable submission record)
+- `reference_asc_uses_non_exempt_encryption_null_blocks_review.md` (next: submission gotcha)
