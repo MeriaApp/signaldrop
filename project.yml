@@ -58,6 +58,9 @@ targetTemplates:
       - path: Resources/AppIcon.icns
         type: file
         buildPhase: resources
+      - path: Resources/oui-vendors.json
+        type: file
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.meria.signaldrop

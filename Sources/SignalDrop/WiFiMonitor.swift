@@ -52,6 +52,20 @@ final class WiFiMonitor: NSObject {
     private let signalRecoveryThreshold = -65 // dBm — hysteresis to avoid flapping
     private var signalDegraded = false
 
+    /// Set the moment RSSI first drops below `signalWarningThreshold`. The
+    /// `signalDegraded` event is only emitted once RSSI has been continuously
+    /// below the threshold for `minSignalDegradedDurationSeconds`. A brief
+    /// 1-second dip to -76 dBm shouldn't trigger a "Signal Weak" alert.
+    private var signalDegradedFirstObservedAt: Date?
+
+    /// User-controlled minimum continuous duration before a weak-signal
+    /// event is emitted. Defaults to 10s; readable from UserDefaults so
+    /// the monitor doesn't depend on NotificationSettings directly.
+    private var minSignalDegradedDuration: TimeInterval {
+        let v = UserDefaults.standard.object(forKey: "notify.minSignalDegradedDuration") as? Double
+        return v ?? 10.0
+    }
+
     private let monitoredEvents: [CWEventType] = [
         .linkDidChange,
         .ssidDidChange,
@@ -195,6 +209,7 @@ extension WiFiMonitor: CWEventDelegate {
             // Reset signal-degraded flag on disconnect so the next reconnect to
             // a strong network can produce fresh weak-signal warnings later.
             signalDegraded = false
+            signalDegradedFirstObservedAt = nil
             let event = WiFiEvent(
                 type: .disconnected,
                 ssid: previousSSID,
@@ -237,18 +252,37 @@ extension WiFiMonitor: CWEventDelegate {
     ) {
         let state = currentState()
 
-        // Signal degradation warning (with hysteresis)
-        if !signalDegraded && rssi <= signalWarningThreshold {
-            signalDegraded = true
-            let event = WiFiEvent(
-                type: .signalDegraded,
-                ssid: state.ssid,
-                rssi: rssi,
-                transmitRate: transmitRate
-            )
-            emit(event)
-        } else if signalDegraded && rssi >= signalRecoveryThreshold {
+        // Signal degradation: only emit once RSSI has been continuously
+        // below the warning threshold for `minSignalDegradedDuration`. A
+        // 1-second dip while roaming between APs would otherwise trigger
+        // a "Signal Weak" notification every time.
+        if !signalDegraded {
+            if rssi <= signalWarningThreshold {
+                let now = Date()
+                if signalDegradedFirstObservedAt == nil {
+                    signalDegradedFirstObservedAt = now
+                }
+                let elapsed = now.timeIntervalSince(signalDegradedFirstObservedAt ?? now)
+                if elapsed >= minSignalDegradedDuration {
+                    signalDegraded = true
+                    signalDegradedFirstObservedAt = nil
+                    let event = WiFiEvent(
+                        type: .signalDegraded,
+                        ssid: state.ssid,
+                        rssi: rssi,
+                        transmitRate: transmitRate
+                    )
+                    emit(event)
+                }
+            } else {
+                // RSSI bounced back above the threshold before the duration
+                // elapsed — reset the timer so the next sustained dip
+                // starts a fresh countdown.
+                signalDegradedFirstObservedAt = nil
+            }
+        } else if rssi >= signalRecoveryThreshold {
             signalDegraded = false
+            signalDegradedFirstObservedAt = nil
             let event = WiFiEvent(
                 type: .signalRecovered,
                 ssid: state.ssid,

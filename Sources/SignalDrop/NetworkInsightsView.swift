@@ -96,13 +96,24 @@ private struct NearbyNetworksList: View {
                             Text(net.ssid ?? "(hidden network)")
                                 .font(.system(size: 13, weight: net.ssid == model.connectedSSID ? .semibold : .regular))
                                 .foregroundColor(net.ssid == model.connectedSSID ? .accentColor : .primary)
-                            Text(net.bssid)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(.secondary)
+                            HStack(spacing: 6) {
+                                Text(net.bssid)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                if let vendor = OUILookup.vendor(for: net.bssid) {
+                                    Text("·")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary.opacity(0.6))
+                                    Text(vendor)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
                         }
                     }
                 }
-                .width(min: 200, ideal: 260)
+                .width(min: 220, ideal: 300)
 
                 TableColumn("Signal") { net in
                     VStack(alignment: .leading, spacing: 1) {
@@ -208,6 +219,7 @@ private struct SignalBars: View {
 private struct SignalGraphPane: View {
     @ObservedObject var model: NetworkInsightsModel
     @State private var visibleSeries: Set<String> = ["RSSI", "Noise"]
+    @State private var hoverSample: SignalSample?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -255,6 +267,7 @@ private struct SignalGraphPane: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                let domain = yDomain
                 Chart {
                     if visibleSeries.contains("RSSI") {
                         ForEach(model.samples) { s in
@@ -291,10 +304,31 @@ private struct SignalGraphPane: View {
                             .interpolationMethod(.monotone)
                         }
                     }
+                    if let s = hoverSample {
+                        RuleMark(x: .value("Time", s.timestamp))
+                            .foregroundStyle(Color.secondary.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        if visibleSeries.contains("RSSI") {
+                            PointMark(
+                                x: .value("Time", s.timestamp),
+                                y: .value("dBm", s.rssi)
+                            )
+                            .foregroundStyle(colorFor("RSSI"))
+                            .symbolSize(48)
+                        }
+                        if visibleSeries.contains("Noise") {
+                            PointMark(
+                                x: .value("Time", s.timestamp),
+                                y: .value("dBm", s.noise)
+                            )
+                            .foregroundStyle(colorFor("Noise"))
+                            .symbolSize(48)
+                        }
+                    }
                 }
-                .chartYScale(domain: -100...(-20))
+                .chartYScale(domain: domain)
                 .chartYAxis {
-                    AxisMarks(position: .leading, values: [-100, -80, -60, -40, -20]) { v in
+                    AxisMarks(position: .leading, values: yAxisValues(for: domain)) { v in
                         AxisGridLine()
                         AxisValueLabel {
                             if let n = v.as(Int.self) {
@@ -305,9 +339,37 @@ private struct SignalGraphPane: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 5)) { v in
+                    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                         AxisGridLine()
                         AxisValueLabel(format: .dateTime.hour().minute().second())
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geo in
+                        Rectangle()
+                            .fill(Color.clear)
+                            .contentShape(Rectangle())
+                            .onContinuousHover { phase in
+                                switch phase {
+                                case .active(let location):
+                                    hoverSample = sampleNearest(to: location, in: geo, proxy: proxy)
+                                case .ended:
+                                    hoverSample = nil
+                                }
+                            }
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geo in
+                        if let s = hoverSample {
+                            let plot = geo[proxy.plotAreaFrame]
+                            let xPos = proxy.position(forX: s.timestamp) ?? 0
+                            HoverAnnotation(sample: s)
+                                .position(
+                                    x: plot.origin.x + min(max(xPos, 70), plot.width - 70),
+                                    y: plot.origin.y + 38
+                                )
+                        }
                     }
                 }
                 .padding(.leading, 36)
@@ -317,6 +379,64 @@ private struct SignalGraphPane: View {
         }
     }
 
+    /// Y-axis domain derived from visible samples. Pads the data range and
+    /// rounds to nearest 10 dBm for clean tick marks. Falls back to the
+    /// classic -100..-20 range when there's no data to read.
+    private var yDomain: ClosedRange<Int> {
+        guard !model.samples.isEmpty else { return -100 ... -20 }
+        var lo = Int.max
+        var hi = Int.min
+        if visibleSeries.contains("RSSI") {
+            for s in model.samples {
+                if s.rssi < lo { lo = s.rssi }
+                if s.rssi > hi { hi = s.rssi }
+            }
+        }
+        if visibleSeries.contains("Noise") {
+            for s in model.samples {
+                if s.noise < lo { lo = s.noise }
+                if s.noise > hi { hi = s.noise }
+            }
+        }
+        guard lo != Int.max else { return -100 ... -20 }
+        // Pad 10 dBm each side, snap to nearest 10, never let the span
+        // collapse below 20 dBm (otherwise a near-flat trace looks jittery).
+        let lower = Int((Double(lo - 10) / 10.0).rounded(.down)) * 10
+        let upper = Int((Double(hi + 10) / 10.0).rounded(.up)) * 10
+        let snapped = lower ... max(upper, lower + 20)
+        // Clamp to physical signal range so a corrupt sample doesn't
+        // stretch the scale into nonsense.
+        let clampedLo = max(snapped.lowerBound, -110)
+        let clampedHi = min(snapped.upperBound, 0)
+        return clampedLo ... max(clampedHi, clampedLo + 20)
+    }
+
+    private func yAxisValues(for domain: ClosedRange<Int>) -> [Int] {
+        let span = domain.upperBound - domain.lowerBound
+        // Aim for 4–6 ticks. Step rounded to nearest 5 to keep clean labels.
+        let raw = Double(span) / 5.0
+        let step = max(5, Int((raw / 5.0).rounded()) * 5)
+        var v = (domain.lowerBound / step) * step
+        if v < domain.lowerBound { v += step }
+        var ticks: [Int] = []
+        while v <= domain.upperBound {
+            ticks.append(v)
+            v += step
+        }
+        return ticks
+    }
+
+    private func sampleNearest(to location: CGPoint, in geo: GeometryProxy, proxy: ChartProxy) -> SignalSample? {
+        guard !model.samples.isEmpty else { return nil }
+        let plot = geo[proxy.plotAreaFrame]
+        let xInPlot = location.x - plot.origin.x
+        guard xInPlot >= 0, xInPlot <= plot.width else { return nil }
+        guard let hovered: Date = proxy.value(atX: xInPlot) else { return nil }
+        return model.samples.min(by: { lhs, rhs in
+            abs(lhs.timestamp.timeIntervalSince(hovered)) < abs(rhs.timestamp.timeIntervalSince(hovered))
+        })
+    }
+
     private func colorFor(_ name: String) -> Color {
         switch name {
         case "RSSI": return .green
@@ -324,6 +444,56 @@ private struct SignalGraphPane: View {
         case "TX rate": return .blue
         default: return .gray
         }
+    }
+}
+
+/// Floating annotation shown next to the cursor while hovering the signal
+/// graph. Mirrors the Apple Stocks / Health pattern: timestamp on top, key
+/// metrics below in monospaced columns.
+private struct HoverAnnotation: View {
+    let sample: SignalSample
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(timeFormatter.string(from: sample.timestamp))
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundColor(.secondary)
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 2) {
+                row(label: "RSSI", value: "\(sample.rssi) dBm", color: .green)
+                row(label: "Noise", value: "\(sample.noise) dBm", color: .red)
+                row(label: "SNR", value: "\(sample.snr) dB", color: .secondary)
+                if sample.transmitRate > 0 {
+                    row(label: "TX", value: "\(Int(sample.transmitRate)) Mbps", color: .blue)
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.regularMaterial)
+                .shadow(color: Color.black.opacity(0.12), radius: 6, y: 2)
+        )
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func row(label: String, value: String, color: Color) -> some View {
+        GridRow {
+            HStack(spacing: 5) {
+                Circle().fill(color).frame(width: 6, height: 6)
+                Text(label).font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            Text(value)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(.primary)
+        }
+    }
+
+    private var timeFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm:ss a"
+        return f
     }
 }
 

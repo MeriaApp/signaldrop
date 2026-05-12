@@ -55,6 +55,14 @@ final class NotificationSettings: ObservableObject {
     /// Range: 0 (notify every drop) to 60 (only major drops). Default 5s.
     @AppStorage("notify.minDisconnectDuration") var minDisconnectDurationSeconds: Double = 5.0
 
+    /// Don't notify about a signal-degraded event unless the signal stays
+    /// below the warning threshold continuously for at least this many
+    /// seconds. A 1-second flicker to -76 dBm shouldn't fire "Signal Weak."
+    /// Range: 0 (notify on every dip) to 60 (only sustained weakness).
+    /// Default 10s — longer than the disconnect threshold because RSSI is
+    /// noisier than link state.
+    @AppStorage("notify.minSignalDegradedDuration") var minSignalDegradedDurationSeconds: Double = 10.0
+
     /// When ON, suppress all non-critical notifications during the quiet
     /// hours window. Internet-lost + disconnect notifications still fire
     /// because those are the critical category.

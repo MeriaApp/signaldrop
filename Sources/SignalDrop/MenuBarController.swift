@@ -13,8 +13,6 @@ final class MenuBarController {
     private var recentHeaderItem: NSMenuItem!
     private var statsMenuItem: NSMenuItem!
     private var reliabilityHeaderItem: NSMenuItem!
-    private var soundToggle: NSMenuItem!
-    private var signalWarningToggle: NSMenuItem!
     private var loginToggle: NSMenuItem!
     private var recentEventItems: [NSMenuItem] = []
     private var reliabilityItems: [NSMenuItem] = []
@@ -25,6 +23,7 @@ final class MenuBarController {
     private var lastActiveNonWifiLabel: String?
     private var lastLocationAuthorized: Bool = true
     private var lastNotificationsAuthorized: Bool = true
+    private var lastInternetReachable: Bool = true
 
     private var grantLocationMenuItem: NSMenuItem?
     private var notificationsDisabledMenuItem: NSMenuItem?
@@ -36,10 +35,8 @@ final class MenuBarController {
 
     // Callbacks
     var onExportLog: (() -> Void)?
-    var onExportReport: (() -> Void)?
     var onCopyReceipt: (() -> Void)?
     var onShowAbout: (() -> Void)?
-    var onShowWelcome: (() -> Void)?
     var onShowNetworkInsights: (() -> Void)?
     var onShowSettings: (() -> Void)?
     var onOpenLocationSettings: (() -> Void)?
@@ -164,23 +161,9 @@ final class MenuBarController {
         menu.addItem(NSMenuItem.separator())
 
         // ── Preferences ──
-        soundToggle = NSMenuItem(
-            title: "Sound Alerts",
-            action: #selector(toggleSound(_:)),
-            keyEquivalent: ""
-        )
-        soundToggle.target = self
-        soundToggle.state = UserDefaults.standard.bool(forKey: "soundEnabled") ? .on : .off
-        menu.addItem(soundToggle)
-
-        signalWarningToggle = NSMenuItem(
-            title: "Signal Warnings",
-            action: #selector(toggleSignalWarnings(_:)),
-            keyEquivalent: ""
-        )
-        signalWarningToggle.target = self
-        signalWarningToggle.state = UserDefaults.standard.bool(forKey: "signalWarningsEnabled") ? .on : .off
-        menu.addItem(signalWarningToggle)
+        // Sound + per-event notification toggles live in the Settings window
+        // (⌘,) — keeping duplicate menu toggles drifted out of sync with
+        // @AppStorage and made the menu unnecessarily long.
 
         #if !APPSTORE
         autoDisconnectToggle = NSMenuItem(
@@ -214,14 +197,9 @@ final class MenuBarController {
         exportItem.target = self
         menu.addItem(exportItem)
 
-        let reportItem = NSMenuItem(
-            title: "Generate ISP Report...",
-            action: #selector(exportReport(_:)),
-            keyEquivalent: "r"
-        )
-        reportItem.keyEquivalentModifierMask = .command
-        reportItem.target = self
-        menu.addItem(reportItem)
+        // The "Generate ISP Report…" PDF is now reachable via the Connection
+        // History tab's Export PDF button (⌘E inside Network Insights), which
+        // produces a richer report with per-network rollups and the timeline.
 
         let receiptItem = NSMenuItem(
             title: "Copy Receipt for Support",
@@ -254,14 +232,6 @@ final class MenuBarController {
         checkForUpdatesItem.target = self
         menu.addItem(checkForUpdatesItem)
         #endif
-
-        let welcomeItem = NSMenuItem(
-            title: "Show Welcome\u{2026}",
-            action: #selector(showWelcomeAction(_:)),
-            keyEquivalent: ""
-        )
-        welcomeItem.target = self
-        menu.addItem(welcomeItem)
 
         let aboutItem = NSMenuItem(
             title: "About SignalDrop",
@@ -325,17 +295,24 @@ final class MenuBarController {
             signalMenuItem.title = "Signal: \(state.signalQuality.rawValue) (\(state.rssi) dBm)"
             signalMenuItem.isHidden = false
 
-            let iconName: String
-            switch state.signalQuality {
-            case .excellent, .good: iconName = "dot.radiowaves.left.and.right"
-            case .fair: iconName = "dot.radiowaves.left.and.right"
-            case .weak: iconName = "dot.radiowaves.forward"
-            case .none: iconName = "dot.radiowaves.up.forward"
+            if !lastInternetReachable {
+                // WiFi is up, internet is down. The router/captive-portal/ISP
+                // situation deserves its own icon — Apple's WiFi menu shows
+                // the same exclamation glyph in this state.
+                statusItem.button?.image = NSImage(
+                    systemSymbolName: "wifi.exclamationmark",
+                    accessibilityDescription: "WiFi connected — internet unreachable"
+                )
+            } else {
+                // Variable-value wifi symbol renders 0..4 "bars" by intensity.
+                // Mapping uses the same dBm cutoffs as SignalQuality so the
+                // menu bar matches the dropdown's "Signal: Good (-58 dBm)" line.
+                statusItem.button?.image = NSImage(
+                    systemSymbolName: "wifi",
+                    variableValue: variableValueFor(rssi: state.rssi),
+                    accessibilityDescription: "WiFi: \(state.signalQuality.rawValue) (\(state.rssi) dBm)"
+                )
             }
-            statusItem.button?.image = NSImage(
-                systemSymbolName: iconName,
-                accessibilityDescription: "WiFi: \(state.signalQuality.rawValue)"
-            )
         } else if locationGatedNameless {
             statusMenuItem.title = "WiFi on — network name hidden"
             // We have RSSI even without Location; show it so the user
@@ -354,29 +331,47 @@ final class MenuBarController {
             statusMenuItem.title = nonWifiLabel.map { "WiFi Off — Online via \($0)" } ?? "WiFi Off"
             signalMenuItem.isHidden = true
             statusItem.button?.image = NSImage(
-                systemSymbolName: "antenna.radiowaves.left.and.right.slash",
+                systemSymbolName: "wifi.slash",
                 accessibilityDescription: "WiFi Off"
             )
         } else if let label = nonWifiLabel {
             statusMenuItem.title = "Online via \(label) — WiFi idle"
             signalMenuItem.isHidden = true
             statusItem.button?.image = NSImage(
-                systemSymbolName: "antenna.radiowaves.left.and.right.slash",
+                systemSymbolName: "wifi.slash",
                 accessibilityDescription: "WiFi Idle — Online via \(label)"
             )
         } else {
             statusMenuItem.title = "Disconnected"
             signalMenuItem.isHidden = true
             statusItem.button?.image = NSImage(
-                systemSymbolName: "antenna.radiowaves.left.and.right.slash",
+                systemSymbolName: "wifi.slash",
                 accessibilityDescription: "WiFi Disconnected"
             )
         }
     }
 
+    /// Map RSSI (dBm) onto the variable-value range SF Symbols expects for
+    /// the `wifi` glyph: 1.0 fills all four arcs, ~0.66 shows three, ~0.33
+    /// shows one, 0 leaves just the dot. Cutoffs mirror SignalQuality.
+    private func variableValueFor(rssi: Int) -> Double {
+        switch rssi {
+        case _ where rssi >= -50:  return 1.0   // excellent: 4 bars
+        case -65 ..< -50:          return 0.66  // good: 3 bars
+        case -75 ..< -65:          return 0.33  // fair: 2 bars
+        case _ where rssi < -75:   return 0.0   // weak: 1 bar / 0 bars
+        default:                   return 1.0
+        }
+    }
+
     func updateInternetStatus(reachable: Bool) {
+        lastInternetReachable = reachable
         internetMenuItem.title = reachable ? "Internet: Reachable" : "Internet: Unreachable"
         internetMenuItem.isHidden = false
+        // WiFi-connected-but-internet-down should flip the menubar icon to
+        // `wifi.exclamationmark`, which means rerendering whenever reachability
+        // changes — not only on WiFi state transitions.
+        renderStatus()
     }
 
     func updateConnectionQuality(_ report: ConnectionQuality.Report) {
@@ -443,18 +438,6 @@ final class MenuBarController {
 
     // MARK: - Actions
 
-    @objc private func toggleSound(_ sender: NSMenuItem) {
-        let enabled = sender.state != .on
-        sender.state = enabled ? .on : .off
-        UserDefaults.standard.set(enabled, forKey: "soundEnabled")
-    }
-
-    @objc private func toggleSignalWarnings(_ sender: NSMenuItem) {
-        let enabled = sender.state != .on
-        sender.state = enabled ? .on : .off
-        UserDefaults.standard.set(enabled, forKey: "signalWarningsEnabled")
-    }
-
     @objc private func toggleLoginItem(_ sender: NSMenuItem) {
         let enable = sender.state != .on
         setLoginItemEnabled(enable)
@@ -489,20 +472,12 @@ final class MenuBarController {
         onExportLog?()
     }
 
-    @objc private func exportReport(_ sender: NSMenuItem) {
-        onExportReport?()
-    }
-
     @objc private func copyReceipt(_ sender: NSMenuItem) {
         onCopyReceipt?()
     }
 
     @objc private func showAboutAction(_ sender: NSMenuItem) {
         onShowAbout?()
-    }
-
-    @objc private func showWelcomeAction(_ sender: NSMenuItem) {
-        onShowWelcome?()
     }
 
     @objc private func showNetworkInsightsAction(_ sender: NSMenuItem) {
@@ -523,12 +498,15 @@ final class MenuBarController {
 
     private func renderPermissionHints(locationGatedNameless: Bool) {
         grantLocationMenuItem?.isHidden = !locationGatedNameless
-        // Surface a notifications-denied hint ONLY when the user has the
-        // feature enabled in our prefs but the system denied the perm —
-        // otherwise it's just noise.
-        let signalWarningsOn = UserDefaults.standard.bool(forKey: "signalWarningsEnabled")
-        let soundOn = UserDefaults.standard.bool(forKey: "soundEnabled")
-        let userExpectsAlerts = signalWarningsOn || soundOn
+        // Surface the notifications-denied hint ONLY when the user has
+        // opted-in to at least one notification category but the OS-level
+        // permission is denied — otherwise the hint is just noise.
+        // Keys mirror NotificationSettings' @AppStorage; defaults match too.
+        let defs = UserDefaults.standard
+        let userExpectsAlerts =
+            (defs.object(forKey: "notify.disconnected") as? Bool ?? true)
+            || (defs.object(forKey: "notify.signalDegraded") as? Bool ?? true)
+            || (defs.object(forKey: "notify.internetLost") as? Bool ?? true)
         notificationsDisabledMenuItem?.isHidden = !(userExpectsAlerts && !lastNotificationsAuthorized)
     }
 

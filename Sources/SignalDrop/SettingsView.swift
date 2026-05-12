@@ -31,12 +31,30 @@ struct SettingsView: View {
                     HStack {
                         Text("Ignore drops shorter than")
                         Spacer()
-                        Text(thresholdLabel)
+                        Text(disconnectThresholdLabel)
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
                     Slider(value: $settings.minDisconnectDurationSeconds, in: 0...60, step: 1)
                     Text("Phantom 1–2s drops happen when your Mac roams between access points or wakes from sleep. Anything shorter than this threshold is silenced as a notification, but still appears in the History tab.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 4)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Ignore weak-signal flickers shorter than")
+                        Spacer()
+                        Text(signalDegradedThresholdLabel)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(value: $settings.minSignalDegradedDurationSeconds, in: 0...60, step: 1)
+                    Text("RSSI is noisy. A 1-second dip below -75 dBm during a quick roam shouldn't fire a \u{201C}Signal Weak\u{201D} notification. Only sustained dips longer than this threshold are surfaced.")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -85,9 +103,15 @@ struct SettingsView: View {
         .frame(minWidth: 520, idealWidth: 560, minHeight: 720, idealHeight: 760)
     }
 
-    private var thresholdLabel: String {
+    private var disconnectThresholdLabel: String {
         let v = Int(settings.minDisconnectDurationSeconds.rounded())
         if v == 0 { return "notify every drop" }
+        return "\(v) second\(v == 1 ? "" : "s")"
+    }
+
+    private var signalDegradedThresholdLabel: String {
+        let v = Int(settings.minSignalDegradedDurationSeconds.rounded())
+        if v == 0 { return "notify on every dip" }
         return "\(v) second\(v == 1 ? "" : "s")"
     }
 

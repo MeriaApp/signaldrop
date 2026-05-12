@@ -93,11 +93,9 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         // Menu bar
         menuBar.setup()
         menuBar.onExportLog = { [weak self] in self?.exportLog() }
-        menuBar.onExportReport = { [weak self] in self?.ispReport.saveReport() }
         menuBar.onCopyReceipt = { [weak self] in self?.copyReceiptToClipboard() }
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.onShowAbout = { [weak self] in self?.showAbout() }
-        menuBar.onShowWelcome = { [weak self] in self?.showOnboardingAgain() }
         menuBar.onOpenLocationSettings = {
             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
                 NSWorkspace.shared.open(url)
