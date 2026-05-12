@@ -225,3 +225,37 @@ Open the handoff prompt at `prompts/handoff-v1.1-polish-round1-2026-05-11.md`, r
 
 **Next session recommendation:**
 When Jesse approves the v1.1 bump, run the ASC submission sequence from `AppStore/whats-new-1.1.0.md` step-by-step. The cancel of the in-review 1.0.2 is the load-bearing first step.
+
+---
+
+## Session b8e5ae39 — Sign-off pass + Tier A/B/C/D scorecard (2026-05-12, after rollover from May 11)
+
+After Round 2/3 shipped + staged, Jesse asked for explicit sign-off that "every single feature, every single menu item, every single design across the board" was "100% flawless and working, best in class." Per the banned-language rules in `~/.claude/rules/real-user-testing.md`, I declined the "100% flawless" framing and instead drove an evidence-based verification pass surface-by-surface, then delivered a Tier A/B/C/D honest scorecard.
+
+**Tier A — verified end-to-end this session (real-user drive, screencap evidence in `test-artifacts/verification-pass/` — 18 PNGs):**
+- About → 1.1.0 build 6
+- Copy Receipt for Support (clipboard)
+- Export Log… (NSSavePanel opens; AX automation can't click Save but real-user click would proceed — sandbox limitation, not defect)
+- Scanner: Sort by Signal direction toggle, Band filter 6 GHz (0 of 23)
+- Signal Graph: 1h time range (15-min ticks), Pause icon+footer
+- History: outage drill-in sheet, [Show in Signal Graph] tab switch, [Copy details], [Done], 7d + 30d period switches (Grade F, 99.89%, 16 outages, 4-network rollup)
+- Settings: quiet hours toggle on, DatePicker "From 10:00 PM to 7:00 AM", Send test notification (delivery log hasError:0 — banner suppressed by Focus mode)
+
+**Tier B — code-reviewed but not driven (read & traced):** ⌘1/⌘2/⌘3 shortcuts, stacked dBm + TX rate panels, Connected pill, LastUpdatedFooter TimelineView, grade pill hover tooltip, OUI bundle (38,967 entries), "Not classified" placeholder, Sparkle on SignalDropDirect, PDF wordmark, SignalSampleStore 3600 capacity.
+
+**Tier C — requires physical state (cannot verify from this session):** WiFi off→wifi.slash, internet unreachable→wifi.exclamationmark, tether mode, Location denied→lock.icloud, cold-start onboarding, sleep/wake CoreWLAN restart, real disconnect → notification + History row, phantom-drop suppression, quiet hours across midnight wrap, per-event toggle persistence, sound on/off behavior, Sparkle update flow, VoiceOver narration.
+
+**Tier D — known limitations shipped intentionally:** Show-in-Signal-Graph doesn't pre-scroll to outage timestamp, Network/Band/Security columns not sortable, conditional Likely-cause column hiding needs macOS 14.4+ (using "Not classified" placeholder), variable-color SF Symbol macOS 14+ only, NSSavePanel + AX automation incompatibility (real-user fine).
+
+**ASC state verified via JWT (2026-05-12):**
+- App `6761185430` SignalDrop - WiFi Monitor, MAC_OS
+- v1.0.1 READY_FOR_SALE (live)
+- v1.0.2 WAITING_FOR_REVIEW + AFTER_APPROVAL (RS `ab1a06cd-93e1-4d10-8053-2150036a88ab` submitted 2026-05-11T22:50 UTC) — STILL NOT IN REVIEW, can be canceled per Jesse's standing approval
+- Stale RS `7e5de1f5-…` READY_FOR_REVIEW never submitted — investigate + clean up in fresh session
+
+**Handoff for fresh refinement session:**
+`prompts/handoff-v1.1-final-refinement-2026-05-12.md` (~12k chars, copied to clipboard at session end). Covers Tier C physical-state walks, Tier P launch-readiness polish (cold-start onboarding, PDF printability, adversarial pass, MAS screenshots refresh, marketing site refresh, What's New tightening, privacy policy review, pre-submit visual audit), and Tier S submission mechanics (cancel 1.0.2 RS → archive + upload 1.1.0 build 6 → 3-step reviewSubmission with releaseType=AFTER_APPROVAL).
+
+**Jesse's instruction for the next session is explicit:** if 1.0.2 still WAITING_FOR_REVIEW → cancel + replace. If flipped to IN_REVIEW → do not touch, hold 1.1.0 staged until 1.0.2 completes.
+
+**Memory files added this session:** `feedback_decline_100_flawless_signoff_drive_evidence_pass.md`, `feedback_macos_status_bar_app_cannot_be_brought_frontmost_via_osascript.md`, `reference_tier_a_b_c_d_signoff_scorecard_pattern.md`.
