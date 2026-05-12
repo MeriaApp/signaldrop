@@ -83,6 +83,7 @@ struct HistorySummaryCard: View {
                     .multilineTextAlignment(.center)
             }
             .frame(width: 150)
+            .help(gradeBreakdownTooltip)
 
             Divider().frame(height: 70)
 
@@ -110,6 +111,46 @@ struct HistorySummaryCard: View {
         case .poor:             return .orange
         case .terrible:         return .red
         }
+    }
+
+    /// Hover-tooltip explaining the grade math. Hangs off `.help(...)`
+    /// on the pill so the user can see exactly what's pulling the
+    /// score down and what they'd need to clear for a B / A.
+    /// Mirrors `ConnectionHistoryService.scoreFromOutages` — keep in
+    /// sync if that formula changes.
+    private var gradeBreakdownTooltip: String {
+        let outagePenalty = report.outageCount * 8
+        let downtimeMinutes = Int(report.totalDowntimeSeconds / 60)
+        let downtimePenalty = downtimeMinutes * 3
+        let nextThreshold: (Int, String)? = {
+            switch report.grade {
+            case .terrible: return (30, "D")
+            case .poor:     return (55, "C")
+            case .fair:     return (75, "B")
+            case .good:     return (90, "A")
+            case .excellent: return nil
+            }
+        }()
+        var lines: [String] = [
+            "Grade calculation",
+            "  Base score:           100",
+            "  \(report.outageCount) outage\(report.outageCount == 1 ? "" : "s") × −8 = −\(outagePenalty)",
+        ]
+        if downtimeMinutes > 0 {
+            lines.append("  \(historyFormatDuration(report.totalDowntimeSeconds)) downtime × −3/min = −\(downtimePenalty)")
+        } else if report.totalDowntimeSeconds > 0 {
+            lines.append("  \(historyFormatDuration(report.totalDowntimeSeconds)) downtime (under 1 min — no penalty)")
+        }
+        lines.append("  Final:                \(report.score) → \(report.grade.rawValue)")
+        if let (threshold, label) = nextThreshold {
+            let gap = max(0, threshold - report.score)
+            lines.append("")
+            lines.append("Next grade: \(label) at \(threshold) (need +\(gap))")
+        } else {
+            lines.append("")
+            lines.append("You're at the top grade — keep it up.")
+        }
+        return lines.joined(separator: "\n")
     }
 }
 

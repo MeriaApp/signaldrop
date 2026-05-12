@@ -90,12 +90,18 @@ private struct NearbyNetworksList: View {
         } else {
             Table(model.networks) {
                 TableColumn("Network") { net in
+                    let isConnected = net.ssid != nil && net.ssid == model.connectedSSID
                     HStack(spacing: 8) {
                         SignalBars(rssi: net.rssi)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(net.ssid ?? "(hidden network)")
-                                .font(.system(size: 13, weight: net.ssid == model.connectedSSID ? .semibold : .regular))
-                                .foregroundColor(net.ssid == model.connectedSSID ? .accentColor : .primary)
+                            HStack(spacing: 6) {
+                                Text(net.ssid ?? "(hidden network)")
+                                    .font(.system(size: 13, weight: isConnected ? .semibold : .regular))
+                                    .foregroundColor(isConnected ? .accentColor : .primary)
+                                if isConnected {
+                                    ConnectedPill()
+                                }
+                            }
                             HStack(spacing: 6) {
                                 Text(net.bssid)
                                     .font(.system(size: 10, design: .monospaced))
@@ -113,7 +119,7 @@ private struct NearbyNetworksList: View {
                         }
                     }
                 }
-                .width(min: 220, ideal: 300)
+                .width(min: 240, ideal: 320)
 
                 TableColumn("Signal") { net in
                     VStack(alignment: .leading, spacing: 1) {
@@ -194,6 +200,25 @@ private struct EmptyScanState: View {
         } else {
             image
         }
+    }
+}
+
+/// Small accent-tinted "Connected" capsule shown after the SSID in the
+/// scanner table when a row matches the currently-connected network.
+/// Subtle enough not to dominate the row (10pt text, 5pt vertical
+/// padding) but loud enough to spot in a 20+ row scan, which was the
+/// §2.8 audit finding.
+private struct ConnectedPill: View {
+    var body: some View {
+        Text("Connected")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(.accentColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(
+                Capsule().fill(Color.accentColor.opacity(0.16))
+            )
+            .accessibilityLabel("Connected to this network")
     }
 }
 
