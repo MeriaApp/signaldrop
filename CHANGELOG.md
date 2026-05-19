@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0 (build 7) — 2026-05-18
+
+App Review compliance fix for Guideline 5.1.1(iv) — Privacy. The
+pre-permission explainer screens (Location, Notifications) previously
+used a directional "Allow"/"Enable" inner button and offered an exit
+via a "Skip" footer button. Apple's guidance requires that pre-prompt
+screens use neutral button labels ("Continue", "Next") and that the
+user always proceed to the OS permission prompt after seeing the
+explainer.
+
+- Renamed step titles "Allow location access" → "Location access" and
+  "Allow notifications" → "Notifications".
+- Removed the inner "Allow"/"Enable" call-to-action; the only path
+  forward is now the footer "Continue" button.
+- Removed the "Skip" footer label; on permission steps the footer
+  button is always "Continue" and tapping it directly triggers the
+  CoreLocation / UNUserNotificationCenter authorization request.
+- The post-onboarding "done" step still surfaces an honest summary
+  when the user declined either permission in the OS prompt.
+
+No functional WiFi-monitoring changes. Build 6 (previous submission)
+is superseded.
+
 ## 1.0.2 — 2026-05-11
 
 Fixes a stale-status bug where the menu header could keep showing

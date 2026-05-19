@@ -24,7 +24,7 @@ settings:
   base:
     DEVELOPMENT_TEAM: 36D97ZTP6J
     MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "6"
+    CURRENT_PROJECT_VERSION: "7"
   configs:
     Debug:
       CODE_SIGN_IDENTITY: "Apple Development"

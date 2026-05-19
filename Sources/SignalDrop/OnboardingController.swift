@@ -8,8 +8,11 @@ import UserNotifications
 /// permission prompts (one at a time, with context) before handing back
 /// to the menu bar app.
 ///
-/// macOS doesn't let us re-prompt for a denied permission, so each step
-/// also includes a "Open System Settings" affordance for the denied case.
+/// The pre-permission explainer screen has a single "Continue" footer
+/// button that triggers the OS prompt — no inner CTA, no skip path.
+/// (App Review 5.1.1(iv): pre-permission screens may not use directional
+/// button labels like "Allow", and the user must always proceed to the
+/// permission request after seeing the explainer.)
 final class OnboardingController: NSObject {
     private var window: NSWindow?
     private var locationManager: CLLocationManager?
@@ -28,9 +31,6 @@ final class OnboardingController: NSObject {
             },
             requestNotifications: { completion in
                 Self.requestNotifications(completion: completion)
-            },
-            openSettings: { kind in
-                Self.openSystemSettings(for: kind)
             },
             onFinish: { [weak self] in
                 self?.finish()
@@ -115,20 +115,6 @@ final class OnboardingController: NSObject {
         }
     }
 
-    enum PermissionKind { case location, notifications }
-
-    private static func openSystemSettings(for kind: PermissionKind) {
-        let urlString: String
-        switch kind {
-        case .location:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"
-        case .notifications:
-            urlString = "x-apple.systempreferences:com.apple.preference.notifications"
-        }
-        if let url = URL(string: urlString) {
-            NSWorkspace.shared.open(url)
-        }
-    }
 }
 
 extension OnboardingController: NSWindowDelegate {

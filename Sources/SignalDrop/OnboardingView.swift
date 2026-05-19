@@ -15,7 +15,6 @@ struct OnboardingView: View {
 
     let requestLocation: (@escaping (PermissionResult) -> Void) -> Void
     let requestNotifications: (@escaping (PermissionResult) -> Void) -> Void
-    let openSettings: (OnboardingController.PermissionKind) -> Void
     let onFinish: () -> Void
 
     var body: some View {
@@ -71,22 +70,8 @@ struct OnboardingView: View {
         permissionStep(
             symbol: "location.circle.fill",
             tint: .blue,
-            title: "Allow location access",
-            body: "Apple requires location permission for any app that reads WiFi network names — even though SignalDrop never uses your location for anything else.\n\nYour location is never stored, sent anywhere, or shared.",
-            actionLabel: locationResult == .denied ? "Open System Settings" : "Allow",
-            isComplete: locationResult == .granted,
-            isDenied: locationResult == .denied,
-            action: {
-                if locationResult == .denied {
-                    openSettings(.location)
-                } else {
-                    isAwaitingPermission = true
-                    requestLocation { result in
-                        locationResult = result
-                        isAwaitingPermission = false
-                    }
-                }
-            }
+            title: "Location access",
+            body: "Apple requires location permission for any app that reads WiFi network names — even though SignalDrop never uses your location for anything else.\n\nYour location is never stored, sent anywhere, or shared."
         )
     }
 
@@ -94,22 +79,8 @@ struct OnboardingView: View {
         permissionStep(
             symbol: "bell.badge.circle.fill",
             tint: .orange,
-            title: "Allow notifications",
-            body: "SignalDrop alerts you the moment your connection changes — disconnects, weak signal, internet outages. Without this, the app still works but can only show events in the menu.",
-            actionLabel: notificationsResult == .denied ? "Open System Settings" : "Enable",
-            isComplete: notificationsResult == .granted,
-            isDenied: notificationsResult == .denied,
-            action: {
-                if notificationsResult == .denied {
-                    openSettings(.notifications)
-                } else {
-                    isAwaitingPermission = true
-                    requestNotifications { result in
-                        notificationsResult = result
-                        isAwaitingPermission = false
-                    }
-                }
-            }
+            title: "Notifications",
+            body: "SignalDrop alerts you the moment your connection changes — disconnects, weak signal, internet outages. Without this, the app still works but can only show events in the menu."
         )
     }
 
@@ -178,11 +149,7 @@ struct OnboardingView: View {
         symbol: String,
         tint: Color,
         title: String,
-        body: String,
-        actionLabel: String,
-        isComplete: Bool,
-        isDenied: Bool,
-        action: @escaping () -> Void
+        body: String
     ) -> some View {
         VStack(spacing: 16) {
             ZStack {
@@ -202,27 +169,6 @@ struct OnboardingView: View {
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 420)
-
-            Button(action: action) {
-                HStack(spacing: 6) {
-                    if isComplete {
-                        Image(systemName: "checkmark")
-                        Text("Granted")
-                    } else {
-                        Text(actionLabel)
-                    }
-                }
-                .frame(minWidth: 140)
-            }
-            .controlSize(.large)
-            .keyboardShortcut(.defaultAction)
-            .disabled(isComplete || isAwaitingPermission)
-
-            if isDenied {
-                Text("You can change this any time in System Settings → Privacy & Security.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
         }
     }
 
@@ -296,8 +242,8 @@ struct OnboardingView: View {
     private var primaryLabel: String {
         switch step {
         case .welcome:        return "Continue"
-        case .location:       return locationResult == .granted ? "Continue" : "Skip"
-        case .notifications:  return notificationsResult == .granted ? "Continue" : "Skip"
+        case .location:       return "Continue"
+        case .notifications:  return "Continue"
         case .done:           return "Get Started"
         }
     }
@@ -308,10 +254,32 @@ struct OnboardingView: View {
 
     private func advance() {
         switch step {
-        case .welcome:        step = .location
-        case .location:       step = .notifications
-        case .notifications:  step = .done
-        case .done:           onFinish()
+        case .welcome:
+            step = .location
+        case .location:
+            if locationResult != nil {
+                step = .notifications
+            } else {
+                isAwaitingPermission = true
+                requestLocation { result in
+                    locationResult = result
+                    isAwaitingPermission = false
+                    step = .notifications
+                }
+            }
+        case .notifications:
+            if notificationsResult != nil {
+                step = .done
+            } else {
+                isAwaitingPermission = true
+                requestNotifications { result in
+                    notificationsResult = result
+                    isAwaitingPermission = false
+                    step = .done
+                }
+            }
+        case .done:
+            onFinish()
         }
     }
 }
