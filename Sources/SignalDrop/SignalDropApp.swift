@@ -5,6 +5,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     private let wifiMonitor = WiFiMonitor()
     private let networkMonitor = NetworkMonitor()
     private let notificationService = NotificationService()
+    private let reviewPrompt = ReviewPromptService()
     private let eventLog = EventLog()
     private let menuBar = MenuBarController()
     private let locationManager = LocationManager()
@@ -250,6 +251,14 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         }
 
         sendNotification(for: enriched)
+
+        // A reconnect carrying downtime details means a *real* drop was just
+        // caught, reported, and recovered — the single highest-satisfaction
+        // moment to ask for an App Store rating. The service self-throttles.
+        if enriched.type == .connected, enriched.details != nil {
+            reviewPrompt.recordCaughtDropAndMaybeAsk()
+        }
+
         refreshUI()
     }
 
