@@ -9,7 +9,10 @@ import Sparkle
 ///
 /// SUFeedURL and SUPublicEDKey are configured in Info.plist via
 /// project.yml. The private signing key lives in the developer's
-/// Keychain — Scripts/release-direct.sh shells out to `sign_update`
+/// Keychain. ⚠️ This cited Scripts/release-direct.sh, which has never existed
+/// (checked across all git history); no script in Scripts/ calls `sign_update`
+/// either. Scripts/release.sh is the closest live script. Signing appears to be
+/// a manual step — verify before trusting this comment.
 /// when publishing a new appcast entry.
 final class UpdaterService: NSObject {
     private let controller: SPUStandardUpdaterController
