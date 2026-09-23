@@ -47,6 +47,11 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     // Recent-event window used by disconnect-cause classifier
     private var lastSignalDegradedAt: Date?
     private var lastInternetLostAt: Date?
+    /// Set when a "down" alert was actually shown, so the matching "back"
+    /// alert (with the downtime) is shown too even if the user never opted
+    /// into every reconnect. If we told you it broke, we tell you it's fixed.
+    private var disconnectAlertShown = false
+    private var internetLostAlertShown = false
     private let causeWindow: TimeInterval = 60
 
     // Throttling: prevent notification spam during WiFi flapping. The
@@ -169,7 +174,14 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
                 self.cancelDeadNetworkTimer()
                 #endif
 
-                let event = WiFiEvent(type: .internetRestored, ssid: self.wifiMonitor.currentState().ssid)
+                let details = self.lastInternetLostAt.map {
+                    WiFiMonitor.formatOfflineDuration(Date().timeIntervalSince($0))
+                }
+                let event = WiFiEvent(
+                    type: .internetRestored,
+                    ssid: self.wifiMonitor.currentState().ssid,
+                    details: details
+                )
                 self.handleEvent(event)
             }
         }
@@ -212,6 +224,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
 
     @objc private func systemDidWake(_ notification: Notification) {
         wifiMonitor.restartMonitoring()
+        networkMonitor.systemDidWake()
     }
 
     // MARK: - Event Handling
@@ -298,9 +311,30 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         // Quiet Hours suppresses every category uniformly. A 3am modem-reset
         // disconnect is exactly the thing a user enabling quiet hours wants
         // silenced; the History tab + ISP receipt still capture it.
-        guard notificationSettings.shouldNotify(for: event.type) else { return }
+        // Losing the internet because WiFi itself dropped is already covered by
+        // the (flicker-suppressed) disconnect alert; only alert on internet loss
+        // while WiFi stays connected. The event is still logged either way.
+        if event.type == .internetLost, event.details == nil { return }
+
+        let closesShownOutage: Bool
+        switch event.type {
+        case .connected:
+            closesShownOutage = disconnectAlertShown
+            disconnectAlertShown = false
+        case .internetRestored:
+            closesShownOutage = internetLostAlertShown
+            internetLostAlertShown = false
+        default:
+            closesShownOutage = false
+        }
+        let userWantsAlert = closesShownOutage
+            ? !notificationSettings.isInQuietHours()
+            : notificationSettings.shouldNotify(for: event.type)
+        guard userWantsAlert else { return }
         guard shouldNotify(for: event.type) else { return }
         lastNotificationTime[event.type] = Date()
+        if event.type == .disconnected { disconnectAlertShown = true }
+        if event.type == .internetLost { internetLostAlertShown = true }
 
         let soundEnabled = notificationSettings.soundEnabled
 
@@ -347,14 +381,14 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         case .internetLost:
             notificationService.send(
                 title: "Internet Unreachable",
-                body: "WiFi connected but no internet access",
+                body: "Connected to \(event.ssid ?? "WiFi"), but the internet isn\u{2019}t responding",
                 sound: soundEnabled
             )
 
         case .internetRestored:
             notificationService.send(
                 title: "Internet Restored",
-                body: "Back online",
+                body: event.details.map { "Back online \u{2014} \($0)" } ?? "Back online",
                 sound: false
             )
 

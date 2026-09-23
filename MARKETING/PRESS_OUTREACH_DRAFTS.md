@@ -69,8 +69,8 @@ The feature that's unique vs every other Mac WiFi tool: per-network reliability 
 Specs:
 - macOS 13 Ventura+, universal binary (Apple Silicon + Intel)
 - $4.99 one-time, no IAP, no subscription
-- Fully sandboxed, zero analytics, zero outbound network requests
-- Event-driven CoreWLAN (no polling, no battery impact)
+- Fully sandboxed, zero analytics, no data collection (its only request is an anonymous connectivity check to Apple)
+- Event-driven CoreWLAN, negligible battery impact
 
 Mac App Store: https://apps.apple.com/app/id6761185430
 Press kit: https://jessemeria.com/signaldrop/press/
@@ -263,7 +263,7 @@ What it does: macOS has never had a native WiFi-disconnect notification — the 
 - One-click ISP outage receipt for support chats (paste-ready format)
 - Connection quality A-F grade based on rolling 24-hour stability
 
-How it works under the hood: event-driven CoreWLAN (zero polling — the OS pushes events to the app the instant something changes), NWPathMonitor for reachability, SQLite event log on disk, no outbound network requests, no analytics, no subscription. Fully sandboxed for the Mac App Store path.
+How it works under the hood: event-driven CoreWLAN (the OS pushes WiFi events to the app the instant something changes), NWPathMonitor plus a lightweight check to Apple's captive.apple.com for real internet reachability, SQLite event log on disk, no data collection, no analytics, no subscription. Fully sandboxed for the Mac App Store path.
 
 Pricing: $4.99 one-time. No IAP. No subscription. All future 1.x updates included.
 
@@ -307,8 +307,8 @@ Solo dev here. SignalDrop came out of a year of getting brushed off by my ISP ab
 
 Happy to answer questions about:
 - Why $4.99 (and why not free or $19.99)
-- Event-driven CoreWLAN architecture (zero polling, zero battery)
-- Privacy by design (zero outbound network requests, no analytics)
+- Event-driven CoreWLAN architecture (negligible battery)
+- Privacy by design (no data collection, no analytics)
 - The 1.0.2 roadmap (scanner + signal graphs in v1.1)
 
 Promo codes available for the first 20 PH'ers who want to try before buying.

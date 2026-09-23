@@ -190,7 +190,7 @@ extension WiFiMonitor: CWEventDelegate {
             var details: String?
             if let disc = disconnectTime {
                 let duration = Date().timeIntervalSince(disc)
-                details = formatDuration(duration)
+                details = Self.formatOfflineDuration(duration)
             }
             disconnectTime = nil
 
@@ -304,7 +304,7 @@ extension WiFiMonitor: CWEventDelegate {
         }
     }
 
-    private func formatDuration(_ seconds: TimeInterval) -> String {
+    static func formatOfflineDuration(_ seconds: TimeInterval) -> String {
         if seconds < 60 {
             return "\(Int(seconds))s offline"
         } else if seconds < 3600 {

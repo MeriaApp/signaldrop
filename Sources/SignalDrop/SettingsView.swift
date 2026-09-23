@@ -34,7 +34,7 @@ struct SettingsView: View {
             } header: {
                 Text("When to notify")
             } footer: {
-                Text("Choose which events get pushed as macOS notifications. SignalDrop still records every event for the History tab regardless of these toggles.")
+                Text("Choose which events get pushed as macOS notifications. After SignalDrop alerts you to a drop, it always tells you when you\u{2019}re back and how long you were offline; the Reconnects and Internet restored toggles add alerts for every other reconnect. SignalDrop still records every event for the History tab regardless of these toggles.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }

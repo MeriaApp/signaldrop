@@ -434,3 +434,15 @@ Three batched sessions today (adversarial pass → submission → docs hardening
 **Listing:** `AppStore/listing-accuracy-2026-09-23.md` checks every live-listing claim against the code. The biggest mismatch: "connected but no internet" detection is only `NWPathMonitor` path status, which can't see an ISP outage behind a working router. A proposed replacement description is in that file. Jesse must choose: reword (recommended) or build a probe, which would break the "zero network requests" line.
 
 **Next:** Jesse decides on the listing option. Then bump to build 8 (or 1.1.1) with this fix and the new description, and submit via `/asc-submit`. The reply draft for Madison is at `customer-support/2026-09-23-madison-notifications-disabled.md` (not sent).
+
+---
+
+### 2026-09-23 (later) — 1.2.0 build 8: real "connected but no internet" detection
+
+Jesse: "if the claim is an important one, let's make sure we have it." Built it instead of rewording.
+- `NetworkMonitor.swift`: path status plus an HTTPS check to `captive.apple.com` (30 s; 120 s when expensive/constrained; 5 s retry; offline after 2 failures; 10 s while offline; 10 s grace after wake). Tested standalone against a local server switched off and on: offline flagged after 2 failures, recovery on the next check, no false transitions. The real Debug build was seen connecting to 17.253.27.x:443.
+- Down/back pairing: a drop or internet-loss alert that was shown is always followed by its "back" alert with the downtime (quiet hours respected). Internet-loss alerts only fire while WiFi stays connected, which ends the duplicate alert that bypassed phantom-drop suppression.
+- Version 1.2.0 (8) in project.yml; the xcodeproj is regenerated and gitignored.
+- Copy: listing, What's New, promo text and a review-notes addition are in `AppStore/listing-accuracy-2026-09-23.md`. README and unsent press drafts were updated. jessemeria.com `7d69ec3` rewords every zero-network, zero-polling and zero-battery claim and adds privacy §9. It is NOT deployed (the site is also held for /collaborate); deploy it with the release.
+
+**Next:** Jesse's go, then `/asc-submit` for 1.2.0 (8) with the new description and review note. On approval, deploy jessemeria.com and set the promo text.

@@ -130,7 +130,7 @@ If you skip Location Services, SignalDrop still monitors connect/disconnect even
 
 ## Privacy
 
-SignalDrop runs entirely on your Mac. No data is sent anywhere. No analytics. No telemetry. No network requests. It reads your local WiFi state through Apple's public CoreWLAN API and stores events in a local SQLite database.
+SignalDrop runs entirely on your Mac and collects no data. No analytics. No telemetry. Its only network request is an anonymous connectivity check to Apple's `captive.apple.com` (every 30 s, or 2 min on hotspots and in Low Data Mode), which is how it detects WiFi that is connected but has no internet. It reads your local WiFi state through Apple's public CoreWLAN API and stores events in a local SQLite database.
 
 ## Uninstall
 
