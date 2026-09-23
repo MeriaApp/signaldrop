@@ -19,3 +19,8 @@ I've fixed it so the menu re-checks permission every time you open it. The fix i
 Thanks again for reporting it.
 
 Jesse
+
+## 2026-09-23 5:13 PM: Madison's reply
+Thanked us, said they'd wanted an app like this and are "looking forward to tracking those mysterious drops overnight."
+
+Checked against the code before replying: SignalDrop only monitors while the Mac is awake (it holds no sleep assertion), and background DarkWakes were being logged as fake outages (fixed in 6800d60, not yet in any App Store build). The draft reply (~/Desktop/madison-reply.txt, not sent) tells them how to keep the Mac awake overnight, which avoids both problems, and invites feature requests.
