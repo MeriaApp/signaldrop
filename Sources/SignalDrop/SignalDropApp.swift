@@ -90,7 +90,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         if isFirstLaunch {
             UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
             onboarding.onComplete = { [weak self] in
-                self?.notificationService.refreshAuthorizationStatus()
+                self?.refreshNotificationsAuthorization()
             }
             onboarding.show()
         } else {
@@ -117,6 +117,9 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         }
         menuBar.onShowNetworkInsights = { [weak self] in self?.networkInsights.show() }
         menuBar.onShowSettings = { [weak self] in self?.settingsController.show() }
+        // Notification permission can change in System Settings at any time,
+        // so re-read it whenever the menu opens rather than trusting launch state.
+        menuBar.onMenuWillOpen = { [weak self] in self?.refreshNotificationsAuthorization() }
 
         // Settings → "Send test notification" button. Fires through the
         // same NotificationService used by real disconnects so any
@@ -472,6 +475,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         // Self-heal: re-read CoreWLAN every tick so the status header can't
         // sit stale if delegate events go silent (e.g. across sleep/wake).
         menuBar.updateWiFiState(wifiMonitor.currentState())
+        refreshNotificationsAuthorization()
 
         let events = eventLog.recentEvents(limit: 8)
         menuBar.updateRecentEvents(events)
@@ -572,15 +576,14 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.menuBar.updateLocationAuthorized(self.locationManager.isAuthorized)
             self.refreshNotificationsAuthorization()
-            self.notificationService.refreshAuthorizationStatus()
         }
         onboarding.show()
     }
 
     /// Asks UNUserNotificationCenter for current authorization and propagates
-    /// the result to the menu without prompting the user. Used at startup and
-    /// after onboarding completes so the menu reflects reality.
+    /// the result to the menu and the sender without prompting the user.
     private func refreshNotificationsAuthorization() {
+        notificationService.refreshAuthorizationStatus()
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
             let authorized = settings.authorizationStatus == .authorized
                 || settings.authorizationStatus == .provisional

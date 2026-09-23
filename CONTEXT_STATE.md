@@ -424,3 +424,13 @@ Three batched sessions today (adversarial pass → submission → docs hardening
 - Temp build-snapshot at `/tmp/dropout-build-snapshot-1778559976/` (from SignalDrop/SignalDropDirect Release collision) — left in `/tmp/`, OS clears on reboot.
 
 **Next session recommendation:** monitor ASC for the v1.1.0 review verdict (5-10 business days typical for paid Mac App Store). Don't refresh marketing screenshots / send press / refresh blog content until v1.1.0 is LIVE — those want to land together so search engines + AI crawlers see consistent v1.1 messaging across ASC + site + press signals on the same day.
+
+---
+
+### 2026-09-23 — "Notifications disabled" menu bug + listing accuracy check
+
+**What changed:** A customer (Madison, macOS 27) saw "Notifications disabled — events won't alert" with notifications fully allowed. Root cause: on first launch `refreshNotificationsAuthorization()` ran while onboarding was still showing (status `.notDetermined` → false), and the first-launch `onComplete` only refreshed `NotificationService`, never the menu. Nothing re-read permission until relaunch, so toggling notifications on later in System Settings also left real alerts suppressed until relaunch. Fix: one refresh updates both the menu and the sender; it runs at launch, after onboarding, on the 30 s tick, and on `menuWillOpen` (MenuBarController is now an `NSMenuDelegate`). Both schemes build. Not run against a fresh-permission install (would need a new bundle ID to get `.notDetermined` again).
+
+**Listing:** `AppStore/listing-accuracy-2026-09-23.md` checks every live-listing claim against the code. The biggest mismatch: "connected but no internet" detection is only `NWPathMonitor` path status, which can't see an ISP outage behind a working router. A proposed replacement description is in that file. Jesse must choose: reword (recommended) or build a probe, which would break the "zero network requests" line.
+
+**Next:** Jesse decides on the listing option. Then bump to build 8 (or 1.1.1) with this fix and the new description, and submit via `/asc-submit`. The reply draft for Madison is at `customer-support/2026-09-23-madison-notifications-disabled.md` (not sent).

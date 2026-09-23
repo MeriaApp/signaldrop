@@ -1,7 +1,7 @@
 import AppKit
 import ServiceManagement
 
-final class MenuBarController {
+final class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var menu: NSMenu!
 
@@ -41,6 +41,7 @@ final class MenuBarController {
     var onShowSettings: (() -> Void)?
     var onOpenLocationSettings: (() -> Void)?
     var onOpenNotificationSettings: (() -> Void)?
+    var onMenuWillOpen: (() -> Void)?
     var onQuit: (() -> Void)?
 
     #if !APPSTORE
@@ -250,7 +251,12 @@ final class MenuBarController {
         quitItem.target = self
         menu.addItem(quitItem)
 
+        menu.delegate = self
         statusItem.menu = menu
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        onMenuWillOpen?()
     }
 
     // MARK: - State Updates
