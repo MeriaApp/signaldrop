@@ -456,3 +456,12 @@ Jesse: "if the claim is an important one, let's make sure we have it." Built it 
 - The privacy policy and site copy are live: jessemeria.com production is now `1a582d7` = `e5831db` plus the SignalDrop commit, deployed from local branch `deploy/signaldrop-1.2`. /collaborate is still undeployed.
 - Madison was emailed (see customer-support/).
 - **Check status:** `GET /v1/appStoreVersions/8e3172b5-63ac-4a8d-a8b2-50b046fb16ba` → appStoreState.
+
+---
+
+### 2026-09-23 22:15 UTC — 1.2.0 (9) SUBMITTED, replacing build 8
+
+- Why: Madison's follow-up ("tracking those mysterious drops overnight") prompted a check. SignalDrop only monitors while the Mac is awake, and background DarkWakes during sleep were being logged as outages: the 2h 10m "outage" on 2026-09-21 on Jesse's MacBook was clamshell sleep 13:52 to 16:23 (pmset log). Fix `6800d60`: pause WiFi and internet monitoring on willSleep, rebaseline on didWake without inferring a drop from the gap.
+- With Jesse's go, the build 8 review submission `32e5cac5` was cancelled while still WAITING_FOR_REVIEW. Build 9 (`b68ef419-1650-425f-9f51-af4b969a0044`) was attached to the same version `8e3172b5`, a What's New bullet and a review-note bullet were added, and it was resubmitted as `ea9fafc7-996d-4028-b93c-3726fed20009` (WAITING_FOR_REVIEW, AFTER_APPROVAL). Tag `v1.2.0-b9`; `v1.2.0` still marks build 8.
+- Checked: the Release archive is universal, entitlements match build 8, and the fix symbols are in the binary. The sandboxed archive build is running on Jesse's Mac in place of /Applications (build 5), making its connectivity check with no sandbox denials. NOT yet checked through a real sleep: after the next overnight sleep, compare its History (~/Library/Containers/com.meria.signaldrop/.../events.db) against `pmset -g log`.
+- Madison reply draft (unsent): ~/Desktop/madison-reply.txt, covering how to keep the Mac awake overnight and inviting feature requests.
