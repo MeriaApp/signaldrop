@@ -446,3 +446,13 @@ Jesse: "if the claim is an important one, let's make sure we have it." Built it 
 - Copy: listing, What's New, promo text and a review-notes addition are in `AppStore/listing-accuracy-2026-09-23.md`. README and unsent press drafts were updated. jessemeria.com `7d69ec3` rewords every zero-network, zero-polling and zero-battery claim and adds privacy §9. It is NOT deployed (the site is also held for /collaborate); deploy it with the release.
 
 **Next:** Jesse's go, then `/asc-submit` for 1.2.0 (8) with the new description and review note. On approval, deploy jessemeria.com and set the promo text.
+
+---
+
+### 2026-09-23 19:08 UTC — 1.2.0 (8) SUBMITTED, WAITING_FOR_REVIEW
+
+- Version `8e3172b5-63ac-4a8d-a8b2-50b046fb16ba`, build `cbad86fe-41a3-4bbd-807b-7c19cad789bb` (8), review submission `32e5cac5-f126-4a46-b23f-6303a517f5dc`, releaseType AFTER_APPROVAL. Description, promo, What's New and review notes (1.2 changes, the captive.apple.com check disclosed) staged via API. usesNonExemptEncryption=false (HTTPS only), usesIdfa=false.
+- Pre-flight: the archive has no Sparkle, signed entitlements are identical to approved build 7, universal binary. The sandboxed archive build was run on this Mac and reached 17.253.27.x:443 with no sandbox denials; Jesse's installed copy was quit and relaunched. The outage-and-recovery path was verified only in a standalone harness against a local server, not against a real ISP outage. Inventory since build 7 also includes `2655ffb` (a rating prompt after a caught drop, previously unshipped).
+- The privacy policy and site copy are live: jessemeria.com production is now `1a582d7` = `e5831db` plus the SignalDrop commit, deployed from local branch `deploy/signaldrop-1.2`. /collaborate is still undeployed.
+- Madison was emailed (see customer-support/).
+- **Check status:** `GET /v1/appStoreVersions/8e3172b5-63ac-4a8d-a8b2-50b046fb16ba` → appStoreState.
