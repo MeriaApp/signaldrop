@@ -189,8 +189,15 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             self?.menuBar.updateActiveNonWifiInterface(label)
         }
 
-        // Restart CoreWLAN event monitoring after the Mac wakes — CWWiFiClient
-        // delegates can go silent across sleep and stay silent forever otherwise.
+        // Pause monitoring while the Mac sleeps and restart it on a full wake.
+        // CWWiFiClient delegates can go silent across sleep and stay silent
+        // forever otherwise. didWake is not posted for background DarkWakes.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(systemWillSleep(_:)),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(systemDidWake(_:)),
@@ -220,6 +227,11 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         wifiMonitor.stop()
         networkMonitor.stop()
         refreshTimer?.invalidate()
+    }
+
+    @objc private func systemWillSleep(_ notification: Notification) {
+        wifiMonitor.pauseForSleep()
+        networkMonitor.systemWillSleep()
     }
 
     @objc private func systemDidWake(_ notification: Notification) {

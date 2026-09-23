@@ -56,6 +56,7 @@ final class NetworkMonitor {
     private var probeSucceeded = true
     private var consecutiveFailures = 0
     private var probeTimer: DispatchSourceTimer?
+    private var isPausedForSleep = false
     /// Bumped on every path change so a probe started on the old path can't
     /// report into the new one.
     private var probeGeneration = 0
@@ -75,13 +76,27 @@ final class NetworkMonitor {
         }
     }
 
-    /// Call after the Mac wakes: timers that fired during sleep mean nothing,
-    /// and the network needs a moment to come back before it's judged.
+    /// Call before the Mac sleeps. Background wakes during sleep bring the
+    /// network up and down without the user, so nothing is judged until a full wake.
+    func systemWillSleep() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.isPausedForSleep = true
+            self.probeGeneration += 1
+            self.probeTimer?.cancel()
+            self.probeTimer = nil
+        }
+    }
+
+    /// Call after the Mac fully wakes: the network needs a moment to come back
+    /// before it's judged.
     func systemDidWake() {
         queue.async { [weak self] in
-            guard let self, self.pathSatisfied else { return }
+            guard let self else { return }
+            self.isPausedForSleep = false
             self.probeGeneration += 1
             self.consecutiveFailures = 0
+            self.probeSucceeded = true
             self.scheduleProbe(after: Probe.wakeGrace)
         }
     }
@@ -104,6 +119,8 @@ final class NetworkMonitor {
         // reconnect isn't reported as an outage while the first probe runs.
         probeSucceeded = true
 
+        guard !isPausedForSleep else { return }
+
         if pathSatisfied {
             scheduleProbe(after: 0)
         } else {
@@ -123,7 +140,10 @@ final class NetworkMonitor {
     }
 
     private func runProbe() {
-        guard pathSatisfied else { return }
+        guard pathSatisfied else {
+            publishReachability()
+            return
+        }
         let generation = probeGeneration
         var request = URLRequest(url: Probe.url)
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
@@ -139,7 +159,7 @@ final class NetworkMonitor {
     }
 
     private func handleProbeResult(_ succeeded: Bool, generation: Int) {
-        guard generation == probeGeneration, pathSatisfied else { return }
+        guard generation == probeGeneration, pathSatisfied, !isPausedForSleep else { return }
 
         if succeeded {
             consecutiveFailures = 0

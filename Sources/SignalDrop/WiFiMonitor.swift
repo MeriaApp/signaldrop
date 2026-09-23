@@ -105,9 +105,20 @@ final class WiFiMonitor: NSObject {
         emitStateChanged(state)
     }
 
-    /// Re-register CoreWLAN event monitoring. CWWiFiClient delegates can stop
-    /// firing across sleep/wake and never recover on their own — call this from
-    /// NSWorkspace.didWakeNotification to bring them back.
+    /// Stop listening while the Mac sleeps. macOS briefly wakes a sleeping Mac
+    /// in the background (DarkWake) with WiFi often still powered down; events
+    /// seen then would be recorded as drops that never happened.
+    func pauseForSleep() {
+        do {
+            try client.stopMonitoringAllEvents()
+        } catch {
+            print("signaldrop: stop-all failed before sleep: \(error)")
+        }
+    }
+
+    /// Re-register CoreWLAN event monitoring on a full wake. CWWiFiClient
+    /// delegates can stop firing across sleep/wake and never recover on their
+    /// own, so this runs from NSWorkspace.didWakeNotification.
     func restartMonitoring() {
         do {
             try client.stopMonitoringAllEvents()
@@ -116,7 +127,25 @@ final class WiFiMonitor: NSObject {
         }
         client.delegate = self
         installEventMonitors()
-        emitStateChanged(currentState())
+
+        // Rebaseline without inferring drops from the sleep gap: WiFi takes a
+        // few seconds to rejoin after wake, and the delegate reports that rejoin.
+        // Offline time that spans sleep can't be measured, so it isn't reported.
+        let state = currentState()
+        disconnectTime = nil
+        if state.isConnected && !wasConnected {
+            emit(WiFiEvent(
+                type: .connected,
+                ssid: state.ssid,
+                bssid: state.bssid,
+                rssi: state.rssi,
+                transmitRate: state.transmitRate
+            ))
+        }
+        wasConnected = state.isConnected
+        previousSSID = state.ssid
+        previousRSSI = state.rssi
+        emitStateChanged(state)
     }
 
     func stop() {
