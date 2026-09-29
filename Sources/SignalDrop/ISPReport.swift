@@ -56,20 +56,10 @@ final class ISPReport {
 
         // Build outage timeline
         var outages: [(start: Date, end: Date?, duration: TimeInterval, ssid: String?)] = []
-        var lastDisconnect: (date: Date, ssid: String?)?
-        let sorted = events.sorted { $0.timestamp < $1.timestamp }
-        for event in sorted {
-            if event.type == .disconnected {
-                lastDisconnect = (event.timestamp, event.ssid)
-            } else if event.type == .connected, let disc = lastDisconnect {
-                let duration = event.timestamp.timeIntervalSince(disc.date)
-                outages.append((start: disc.date, end: event.timestamp, duration: duration, ssid: disc.ssid))
-                lastDisconnect = nil
-            }
-        }
-        if let disc = lastDisconnect {
-            let duration = now.timeIntervalSince(disc.date)
-            outages.append((start: disc.date, end: nil, duration: duration, ssid: disc.ssid))
+        for pair in WiFiEvent.outagePairs(events) {
+            let end = pair.up?.timestamp
+            let duration = (end ?? now).timeIntervalSince(pair.down.timestamp)
+            outages.append((start: pair.down.timestamp, end: end, duration: duration, ssid: pair.down.ssid))
         }
 
         let totalDowntime = outages.reduce(0.0) { $0 + $1.duration }

@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3.0 (build 10) — 2026-09-29
+
+Ethernet support, requested by a customer comparing an Ethernet-only Mac
+mini with a MacBook Pro on WiFi.
+
+- An outage on a Mac whose internet runs over Ethernet is now recorded as
+  an outage on the "Ethernet" network: an alert when it goes down (link
+  lost, or connected but the internet isn't responding), an alert with the
+  downtime when it's back, and a row in History, the grade, today's stats,
+  the ISP report and the receipt. Previously it was only logged, and only
+  while WiFi was off.
+- Unplugging a laptop from Ethernet onto working WiFi is not an outage.
+- With WiFi also connected, an ISP outage over Ethernet raises one alert,
+  not a WiFi one as well.
+- Outages are paired per connection everywhere they're counted, so a WiFi
+  reconnect can't close an Ethernet outage or the reverse.
+- The menu reads "Online via Ethernet" (or the tether's name, such as
+  "iPhone USB") instead of "WiFi Off — Online via Ethernet or Tether".
+- `SignalDrop -ethernetSelfTest` (Debug) covers the outage decisions and
+  the pairing.
+
 ## 1.1.0 (build 7) — 2026-05-18
 
 App Review compliance fix for Guideline 5.1.1(iv) — Privacy. The

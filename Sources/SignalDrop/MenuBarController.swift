@@ -333,19 +333,25 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 systemSymbolName: "lock.icloud",
                 accessibilityDescription: "WiFi on — Location permission needed for network name"
             )
-        } else if !state.isPoweredOn {
-            statusMenuItem.title = nonWifiLabel.map { "WiFi Off — Online via \($0)" } ?? "WiFi Off"
-            signalMenuItem.isHidden = true
-            statusItem.button?.image = NSImage(
-                systemSymbolName: "wifi.slash",
-                accessibilityDescription: "WiFi Off"
-            )
         } else if let label = nonWifiLabel {
-            statusMenuItem.title = "Online via \(label) — WiFi idle"
+            statusMenuItem.title = lastInternetReachable
+                ? "Online via \(label)"
+                : "\(label) — internet unreachable"
+            signalMenuItem.isHidden = true
+            let isEthernet = label == NetworkMonitor.ethernetLabel
+            let symbol = isEthernet
+                ? (lastInternetReachable ? "cable.connector" : "cable.connector.slash")
+                : "wifi.slash"
+            statusItem.button?.image = NSImage(
+                systemSymbolName: symbol,
+                accessibilityDescription: statusMenuItem.title
+            ) ?? NSImage(systemSymbolName: "network", accessibilityDescription: statusMenuItem.title)
+        } else if !state.isPoweredOn {
+            statusMenuItem.title = "Offline — WiFi Off"
             signalMenuItem.isHidden = true
             statusItem.button?.image = NSImage(
                 systemSymbolName: "wifi.slash",
-                accessibilityDescription: "WiFi Idle — Online via \(label)"
+                accessibilityDescription: "Offline — WiFi Off"
             )
         } else {
             statusMenuItem.title = "Disconnected"

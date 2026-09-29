@@ -174,27 +174,11 @@ final class ConnectionQuality {
         var totalDowntime: TimeInterval = 0
         var longestOutage: TimeInterval = 0
         var outageCount = 0
-        var lastDisconnect: Date?
 
-        let sorted = events.sorted { $0.timestamp < $1.timestamp }
-        for event in sorted {
-            if event.type == .disconnected {
-                lastDisconnect = event.timestamp
-            } else if event.type == .connected, let disc = lastDisconnect {
-                let duration = event.timestamp.timeIntervalSince(disc)
-                if duration >= minOutageDuration {
-                    totalDowntime += duration
-                    longestOutage = max(longestOutage, duration)
-                    outageCount += 1
-                }
-                lastDisconnect = nil
-            }
-        }
-
-        // Still disconnected at the end of the window — count if it's already
-        // past the threshold; otherwise the next sample will tell us.
-        if let disc = lastDisconnect {
-            let duration = periodEnd.timeIntervalSince(disc)
+        // An outage still open at the end of the window counts once it's past
+        // the threshold; otherwise the next sample will tell us.
+        for pair in WiFiEvent.outagePairs(events) {
+            let duration = (pair.up?.timestamp ?? periodEnd).timeIntervalSince(pair.down.timestamp)
             if duration >= minOutageDuration {
                 totalDowntime += duration
                 longestOutage = max(longestOutage, duration)
@@ -213,25 +197,12 @@ final class ConnectionQuality {
     private func realDisconnectsAboveThreshold(
         events: [WiFiEvent], minOutageDuration: TimeInterval
     ) -> [WiFiEvent] {
-        var kept: [WiFiEvent] = []
-        var pending: WiFiEvent?
-        let sorted = events.sorted { $0.timestamp < $1.timestamp }
-        for event in sorted {
-            if event.type == .disconnected {
-                pending = event
-            } else if event.type == .connected, let disc = pending {
-                if event.timestamp.timeIntervalSince(disc.timestamp) >= minOutageDuration {
-                    kept.append(disc)
-                }
-                pending = nil
-            }
-        }
-        if let disc = pending {
-            // Conservatively include open-ended outages (we don't know yet
-            // whether the final length will cross the threshold).
-            kept.append(disc)
-        }
-        return kept
+        // Open-ended outages are included conservatively: we don't know yet
+        // whether their final length will cross the threshold.
+        WiFiEvent.outagePairs(events).filter { pair in
+            guard let up = pair.up else { return true }
+            return up.timestamp.timeIntervalSince(pair.down.timestamp) >= minOutageDuration
+        }.map(\.down)
     }
 
     private func gradeFromScore(_ score: Int) -> Grade {

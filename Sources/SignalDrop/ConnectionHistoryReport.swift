@@ -252,35 +252,15 @@ final class ConnectionHistoryService {
     // MARK: - Private
 
     private func reconstructOutages(events: [WiFiEvent], periodEnd: Date) -> [OutageRecord] {
-        var out: [OutageRecord] = []
-        var pending: WiFiEvent?
-        for ev in events {
-            if ev.type == .disconnected {
-                pending = ev
-            } else if ev.type == .connected, let disc = pending {
-                let duration = ev.timestamp.timeIntervalSince(disc.timestamp)
-                out.append(OutageRecord(
-                    start: disc.timestamp,
-                    end: ev.timestamp,
-                    ssid: disc.ssid,
-                    durationSeconds: duration,
-                    cause: disc.details
-                ))
-                pending = nil
-            }
+        WiFiEvent.outagePairs(events).map { pair in
+            OutageRecord(
+                start: pair.down.timestamp,
+                end: pair.up?.timestamp,
+                ssid: pair.down.ssid,
+                durationSeconds: (pair.up?.timestamp ?? periodEnd).timeIntervalSince(pair.down.timestamp),
+                cause: pair.down.details
+            )
         }
-        // Still disconnected at the end of the window.
-        if let disc = pending {
-            let duration = periodEnd.timeIntervalSince(disc.timestamp)
-            out.append(OutageRecord(
-                start: disc.timestamp,
-                end: nil,
-                ssid: disc.ssid,
-                durationSeconds: duration,
-                cause: disc.details
-            ))
-        }
-        return out
     }
 
     private func computeBuckets(

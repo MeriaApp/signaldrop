@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import SystemConfiguration
 
 /// Reports whether the internet actually answers, not just whether a route exists.
 ///
@@ -8,7 +9,20 @@ import Network
 /// while the path is satisfied, reachability is confirmed with a small request to
 /// Apple's captive-portal check, the same endpoint macOS itself uses. The request
 /// carries no user data.
+///
+/// On a Mac whose internet runs over Ethernet, CoreWLAN reports nothing, so
+/// wired outages are inferred here from the same path and check.
 final class NetworkMonitor {
+    /// A change in an Ethernet connection that was carrying the Mac's internet.
+    enum WiredChange {
+        case lost(cause: String)
+        case restored
+    }
+
+    static let ethernetLabel = "Ethernet"
+    static let ispOutageCause = "ISP outage suspected"
+    static let linkLostCause = "Ethernet link lost"
+
     private enum Probe {
         static let url = URL(string: "https://captive.apple.com/hotspot-detect.html")!
         static let expectedBody = "Success"
@@ -40,15 +54,17 @@ final class NetworkMonitor {
     }()
 
     private(set) var isInternetReachable = true
-    /// Non-nil when the satisfied path is NOT routed over WiFi — i.e. Bluetooth
-    /// tether, USB Personal Hotspot, Ethernet, or cellular. Used so the menu
-    /// header can distinguish "Connected to <SSID>" from "Online via Tether
-    /// while WiFi is off." Nil whenever the active path uses WiFi or the path
-    /// is unsatisfied.
+    /// Non-nil when the satisfied path is NOT routed over WiFi — i.e. Ethernet,
+    /// an iPhone or Bluetooth tether, or cellular. Used so the menu header can
+    /// say "Online via Ethernet" instead of describing WiFi. Nil whenever the
+    /// active path uses WiFi or the path is unsatisfied.
     private(set) var activeNonWifiLabel: String?
 
-    var onInternetStatusChanged: ((Bool) -> Void)?
+    /// `overEthernet` is true when the change is already reported as an
+    /// Ethernet outage through `onWiredChange`, so it shouldn't be alerted twice.
+    var onInternetStatusChanged: ((_ reachable: Bool, _ overEthernet: Bool) -> Void)?
     var onActiveInterfaceChanged: ((String?) -> Void)?
+    var onWiredChange: ((WiredChange) -> Void)?
 
     // Probe state, touched only on `queue`.
     private var pathSatisfied = false
@@ -60,6 +76,14 @@ final class NetworkMonitor {
     /// Bumped on every path change so a probe started on the old path can't
     /// report into the new one.
     private var probeGeneration = 0
+
+    // Ethernet outage state, touched only on `queue`.
+    /// The last satisfied path ran over Ethernet (not a tether). Kept while the
+    /// path is unsatisfied, since that's when a pulled cable shows.
+    private var primaryIsEthernet = false
+    /// Ethernet has carried the internet since the last baseline.
+    private var ethernetTracked = false
+    private var ethernetOutageOpen = false
 
     func start() {
         monitor.pathUpdateHandler = { [weak self] path in
@@ -103,6 +127,9 @@ final class NetworkMonitor {
 
     private func handlePathUpdate(_ path: NWPath) {
         let label = Self.nonWifiLabel(for: path)
+        if path.status == .satisfied {
+            primaryIsEthernet = label == Self.ethernetLabel
+        }
         let prevLabel = activeNonWifiLabel
         activeNonWifiLabel = label
         if label != prevLabel {
@@ -179,10 +206,57 @@ final class NetworkMonitor {
 
     private func publishReachability() {
         let reachable = pathSatisfied && probeSucceeded
+        // Covered when Ethernet was already carrying the connection or an
+        // Ethernet outage is open; tracking that only starts now covers nothing.
+        let wasOverEthernet = ethernetTracked || ethernetOutageOpen
+        evaluateEthernet(online: reachable)
+        let overEthernet = wasOverEthernet || ethernetOutageOpen
         guard reachable != isInternetReachable else { return }
         isInternetReachable = reachable
         DispatchQueue.main.async {
-            self.onInternetStatusChanged?(reachable)
+            self.onInternetStatusChanged?(reachable, overEthernet)
+        }
+    }
+
+    /// An Ethernet outage opens when the Mac loses the internet while Ethernet
+    /// carries it, and closes when the Mac is back online. Switching to WiFi
+    /// with the internet working (a laptop unplugged from its dock) isn't an
+    /// outage; it just stops Ethernet tracking until Ethernet carries it again.
+    private func evaluateEthernet(online: Bool) {
+        if ethernetOutageOpen {
+            guard online else { return }
+            ethernetOutageOpen = false
+            ethernetTracked = primaryIsEthernet
+            publishWired(.restored)
+        } else if ethernetTracked {
+            if !online {
+                ethernetOutageOpen = true
+                publishWired(.lost(cause: pathSatisfied ? Self.ispOutageCause : Self.linkLostCause))
+            } else if !primaryIsEthernet {
+                ethernetTracked = false
+            }
+        } else if online && primaryIsEthernet {
+            ethernetTracked = true
+        }
+    }
+
+    #if DEBUG
+    /// Drives the reachability and Ethernet logic without a real network,
+    /// for `-ethernetSelfTest`. `overEthernet` is ignored while unsatisfied,
+    /// as a real unsatisfied path carries no interface.
+    func simulate(pathSatisfied satisfied: Bool, overEthernet: Bool, probeSucceeded succeeded: Bool) {
+        queue.sync {
+            if satisfied { primaryIsEthernet = overEthernet }
+            pathSatisfied = satisfied
+            probeSucceeded = succeeded
+            publishReachability()
+        }
+    }
+    #endif
+
+    private func publishWired(_ change: WiredChange) {
+        DispatchQueue.main.async {
+            self.onWiredChange?(change)
         }
     }
 
@@ -191,8 +265,26 @@ final class NetworkMonitor {
         if path.usesInterfaceType(.wifi) { return nil }
         if path.usesInterfaceType(.cellular) { return "Cellular" }
         // Bluetooth PAN and USB Personal Hotspot both surface as wiredEthernet.
-        if path.usesInterfaceType(.wiredEthernet) { return "Ethernet or Tether" }
+        if path.usesInterfaceType(.wiredEthernet) {
+            guard let name = path.availableInterfaces.first(where: { $0.type == .wiredEthernet })?.name else {
+                return ethernetLabel
+            }
+            return tetherName(bsdName: name) ?? ethernetLabel
+        }
         if path.usesInterfaceType(.other) { return "Tether" }
         return "another network"
+    }
+
+    /// The system's name for a wired interface when it's a phone or Bluetooth
+    /// tether ("iPhone USB", "Bluetooth PAN"); nil for real Ethernet, whose
+    /// names vary too much ("Ethernet Adapter (en4)", "Thunderbolt 1") to show.
+    private static func tetherName(bsdName: String) -> String? {
+        guard let all = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface],
+              let iface = all.first(where: { SCNetworkInterfaceGetBSDName($0) as String? == bsdName }),
+              let display = SCNetworkInterfaceGetLocalizedDisplayName(iface) as String? else {
+            return nil
+        }
+        let tetherMarkers = ["iPhone", "iPad", "Bluetooth"]
+        return tetherMarkers.contains(where: display.contains) ? display : nil
     }
 }

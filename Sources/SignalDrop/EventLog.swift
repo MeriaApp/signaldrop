@@ -135,48 +135,12 @@ final class EventLog {
     }
 
     func todayStats() -> (disconnects: Int, totalDowntime: TimeInterval) {
-        var disconnects = 0
-        var totalDowntime: TimeInterval = 0
-
-        queue.sync {
-            guard let db else { return }
-            let startOfDay = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970
-
-            // Count disconnects
-            var stmt: OpaquePointer?
-            let countSQL = "SELECT COUNT(*) FROM events WHERE type = 'disconnected' AND timestamp >= ?"
-            if sqlite3_prepare_v2(db, countSQL, -1, &stmt, nil) == SQLITE_OK {
-                sqlite3_bind_double(stmt, 1, startOfDay)
-                if sqlite3_step(stmt) == SQLITE_ROW {
-                    disconnects = Int(sqlite3_column_int(stmt, 0))
-                }
-                sqlite3_finalize(stmt)
-            }
-
-            // Calculate downtime from disconnect/connect pairs
-            let pairsSQL = """
-                SELECT timestamp, type FROM events
-                WHERE type IN ('disconnected', 'connected') AND timestamp >= ?
-                ORDER BY timestamp ASC
-                """
-            if sqlite3_prepare_v2(db, pairsSQL, -1, &stmt, nil) == SQLITE_OK {
-                sqlite3_bind_double(stmt, 1, startOfDay)
-                var lastDisconnect: TimeInterval?
-                while sqlite3_step(stmt) == SQLITE_ROW {
-                    let ts = sqlite3_column_double(stmt, 0)
-                    let type = String(cString: sqlite3_column_text(stmt, 1))
-                    if type == "disconnected" {
-                        lastDisconnect = ts
-                    } else if type == "connected", let disc = lastDisconnect {
-                        totalDowntime += ts - disc
-                        lastDisconnect = nil
-                    }
-                }
-                if let disc = lastDisconnect {
-                    totalDowntime += Date().timeIntervalSince1970 - disc
-                }
-                sqlite3_finalize(stmt)
-            }
+        let now = Date()
+        let events = eventsInRange(from: Calendar.current.startOfDay(for: now), to: now)
+        let pairs = WiFiEvent.outagePairs(events)
+        let disconnects = events.filter { $0.type == .disconnected }.count
+        let totalDowntime = pairs.reduce(0) { total, pair in
+            total + (pair.up?.timestamp ?? now).timeIntervalSince(pair.down.timestamp)
         }
         return (disconnects, totalDowntime)
     }

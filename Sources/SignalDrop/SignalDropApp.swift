@@ -27,9 +27,9 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     /// Disconnect notification deferral. When a disconnect fires, we
     /// schedule the notification for `minDisconnectDurationSeconds` later.
     /// If the user reconnects before the timer fires, we cancel — the
-    /// drop was a phantom and the user doesn't need to be told.
-    private var pendingDisconnectTimer: Timer?
-    private var pendingDisconnectEvent: WiFiEvent?
+    /// drop was a phantom and the user doesn't need to be told. Keyed by
+    /// `WiFiEvent.isWired` so WiFi and Ethernet drops are judged separately.
+    private var pendingDisconnectTimers: [Bool: Timer] = [:]
 
     #if !APPSTORE
     private let webhookService = WebhookService()
@@ -47,10 +47,12 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     // Recent-event window used by disconnect-cause classifier
     private var lastSignalDegradedAt: Date?
     private var lastInternetLostAt: Date?
+    private var ethernetLostAt: Date?
     /// Set when a "down" alert was actually shown, so the matching "back"
     /// alert (with the downtime) is shown too even if the user never opted
     /// into every reconnect. If we told you it broke, we tell you it's fixed.
-    private var disconnectAlertShown = false
+    /// Keyed by `WiFiEvent.isWired`.
+    private var disconnectAlertShown: [Bool: Bool] = [:]
     private var internetLostAlertShown = false
     private let causeWindow: TimeInterval = 60
 
@@ -149,9 +151,11 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         }
 
         // Network monitor
-        networkMonitor.onInternetStatusChanged = { [weak self] reachable in
+        networkMonitor.onInternetStatusChanged = { [weak self] reachable, overEthernet in
             guard let self else { return }
             self.menuBar.updateInternetStatus(reachable: reachable)
+            // An Ethernet outage is reported once, through onWiredChange.
+            guard !overEthernet else { return }
 
             if !reachable {
                 let wifiState = self.wifiMonitor.currentState()
@@ -164,7 +168,7 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
 
                 // If WiFi is still connected when internet drops, that's
                 // strong signal it's an ISP-side outage (not a local WiFi issue).
-                let details: String? = wifiState.isConnected ? "ISP outage suspected" : nil
+                let details: String? = wifiState.isConnected ? NetworkMonitor.ispOutageCause : nil
 
                 self.lastInternetLostAt = Date()
                 let event = WiFiEvent(type: .internetLost, ssid: currentSSID, details: details)
@@ -187,6 +191,9 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         }
         networkMonitor.onActiveInterfaceChanged = { [weak self] label in
             self?.menuBar.updateActiveNonWifiInterface(label)
+        }
+        networkMonitor.onWiredChange = { [weak self] change in
+            self?.handleWiredChange(change)
         }
 
         // Pause monitoring while the Mac sleeps and restart it on a full wake.
@@ -232,6 +239,9 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     @objc private func systemWillSleep(_ notification: Notification) {
         wifiMonitor.pauseForSleep()
         networkMonitor.systemWillSleep()
+        // Offline time that spans sleep can't be measured, so a wired outage
+        // still open at sleep closes on wake without a duration, as WiFi does.
+        ethernetLostAt = nil
     }
 
     @objc private func systemDidWake(_ notification: Notification) {
@@ -241,15 +251,43 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
 
     // MARK: - Event Handling
 
+    /// Ethernet outages are logged as a disconnect/connect pair on the
+    /// "Ethernet" network, so they flow through the same alerts, phantom-drop
+    /// hold, History, grade and receipt as WiFi drops.
+    private func handleWiredChange(_ change: NetworkMonitor.WiredChange) {
+        switch change {
+        case .lost(let cause):
+            ethernetLostAt = Date()
+            handleEvent(WiFiEvent(
+                type: .disconnected,
+                ssid: WiFiEvent.wiredNetworkName,
+                bssid: WiFiEvent.wiredMarker,
+                details: cause
+            ))
+        case .restored:
+            let details = ethernetLostAt.map {
+                WiFiMonitor.formatOfflineDuration(Date().timeIntervalSince($0))
+            }
+            ethernetLostAt = nil
+            handleEvent(WiFiEvent(
+                type: .connected,
+                ssid: WiFiEvent.wiredNetworkName,
+                bssid: WiFiEvent.wiredMarker,
+                details: details
+            ))
+        }
+    }
+
     private func handleEvent(_ event: WiFiEvent) {
         // Track signal-degraded timing for the disconnect-cause classifier.
         if event.type == .signalDegraded {
             lastSignalDegradedAt = Date()
         }
 
-        // Classify a fresh disconnect by looking at the last 60s of events.
+        // Classify a fresh WiFi disconnect by looking at the last 60s of events.
+        // Ethernet outages arrive with their cause already known.
         let enriched: WiFiEvent
-        if event.type == .disconnected {
+        if event.type == .disconnected, !event.isWired {
             enriched = classifyDisconnect(event)
         } else {
             enriched = event
@@ -270,8 +308,8 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
             refreshUI()
             return
         }
-        if event.type == .connected, pendingDisconnectTimer != nil {
-            cancelPendingDisconnect()
+        if event.type == .connected, pendingDisconnectTimers[event.isWired] != nil {
+            cancelPendingDisconnect(isWired: event.isWired)
             // Skip the reconnect notification too — pairing a phantom drop
             // with a "back online" toast is the worst of both worlds.
             refreshUI()
@@ -293,29 +331,24 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
     /// Schedule the disconnect notification for `minDisconnectDurationSeconds`
     /// from now. If a reconnect arrives first, the timer is cancelled.
     private func scheduleDeferredDisconnectNotification(_ event: WiFiEvent) {
-        cancelPendingDisconnect()
-        pendingDisconnectEvent = event
+        cancelPendingDisconnect(isWired: event.isWired)
 
         let threshold = notificationSettings.minDisconnectDurationSeconds
         if threshold <= 0 {
             // User wants every drop notified — fire immediately.
             sendNotification(for: event)
-            pendingDisconnectEvent = nil
             return
         }
 
-        pendingDisconnectTimer = Timer.scheduledTimer(withTimeInterval: threshold, repeats: false) { [weak self] _ in
-            guard let self, let pending = self.pendingDisconnectEvent else { return }
-            self.sendNotification(for: pending)
-            self.pendingDisconnectEvent = nil
-            self.pendingDisconnectTimer = nil
+        pendingDisconnectTimers[event.isWired] = Timer.scheduledTimer(withTimeInterval: threshold, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.pendingDisconnectTimers[event.isWired] = nil
+            self.sendNotification(for: event)
         }
     }
 
-    private func cancelPendingDisconnect() {
-        pendingDisconnectTimer?.invalidate()
-        pendingDisconnectTimer = nil
-        pendingDisconnectEvent = nil
+    private func cancelPendingDisconnect(isWired: Bool) {
+        pendingDisconnectTimers.removeValue(forKey: isWired)?.invalidate()
     }
 
     /// Apply per-event-type settings + throttle, then emit the macOS notification.
@@ -331,8 +364,8 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         let closesShownOutage: Bool
         switch event.type {
         case .connected:
-            closesShownOutage = disconnectAlertShown
-            disconnectAlertShown = false
+            closesShownOutage = disconnectAlertShown[event.isWired] ?? false
+            disconnectAlertShown[event.isWired] = false
         case .internetRestored:
             closesShownOutage = internetLostAlertShown
             internetLostAlertShown = false
@@ -345,12 +378,28 @@ final class SignalDropApp: NSObject, NSApplicationDelegate {
         guard userWantsAlert else { return }
         guard shouldNotify(for: event.type) else { return }
         lastNotificationTime[event.type] = Date()
-        if event.type == .disconnected { disconnectAlertShown = true }
+        if event.type == .disconnected { disconnectAlertShown[event.isWired] = true }
         if event.type == .internetLost { internetLostAlertShown = true }
 
         let soundEnabled = notificationSettings.soundEnabled
 
         switch event.type {
+        case .disconnected where event.isWired:
+            notificationService.send(
+                title: "Ethernet Offline",
+                body: event.details == NetworkMonitor.ispOutageCause
+                    ? "Ethernet is connected, but the internet isn\u{2019}t responding"
+                    : "The Ethernet connection was lost",
+                sound: soundEnabled
+            )
+
+        case .connected where event.isWired:
+            notificationService.send(
+                title: "Ethernet Back Online",
+                body: event.details.map { "Back online \u{2014} \($0)" } ?? "Back online",
+                sound: soundEnabled
+            )
+
         case .disconnected:
             notificationService.send(
                 title: "WiFi Disconnected",

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Generates a short, paste-friendly text "receipt" of WiFi reliability over a
+/// Generates a short, paste-friendly text "receipt" of connection reliability over a
 /// rolling window. Designed for users to drop into ISP support chats so the
 /// support agent has concrete data instead of "my internet has been bad."
 final class ISPReceipt {
@@ -18,7 +18,10 @@ final class ISPReceipt {
         let start = now.addingTimeInterval(-Double(days) * 86400)
         let events = eventLog.eventsInRange(from: start, to: now)
         let disconnects = events.filter { $0.type == .disconnected }
-        let internetIssues = events.filter { $0.type == .internetLost && $0.details == "ISP outage suspected" }
+        let internetIssues = events.filter {
+            ($0.type == .internetLost || ($0.type == .disconnected && $0.isWired))
+                && $0.details == "ISP outage suspected"
+        }
 
         // Disconnect / downtime totals
         let (total, longest, _, longestEvent) = computeDowntime(events: events, periodEnd: now)
@@ -54,7 +57,7 @@ final class ISPReceipt {
         }
 
         if internetIssues.count > 0 {
-            lines.append("ISP-suspected outages (WiFi up, internet down): \(internetIssues.count)")
+            lines.append("ISP-suspected outages (connected, internet down): \(internetIssues.count)")
         }
 
         if !reliability.isEmpty {
@@ -71,33 +74,16 @@ final class ISPReceipt {
         var total: TimeInterval = 0
         var longest: TimeInterval = 0
         var longestEv: WiFiEvent?
-        var count = 0
-        var lastDisc: WiFiEvent?
-        let sorted = events.sorted { $0.timestamp < $1.timestamp }
-        for ev in sorted {
-            if ev.type == .disconnected {
-                lastDisc = ev
-            } else if ev.type == .connected, let disc = lastDisc {
-                let dur = ev.timestamp.timeIntervalSince(disc.timestamp)
-                total += dur
-                if dur > longest {
-                    longest = dur
-                    longestEv = disc
-                }
-                count += 1
-                lastDisc = nil
-            }
-        }
-        if let disc = lastDisc {
-            let dur = periodEnd.timeIntervalSince(disc.timestamp)
+        let pairs = WiFiEvent.outagePairs(events)
+        for pair in pairs {
+            let dur = (pair.up?.timestamp ?? periodEnd).timeIntervalSince(pair.down.timestamp)
             total += dur
             if dur > longest {
                 longest = dur
-                longestEv = disc
+                longestEv = pair.down
             }
-            count += 1
         }
-        return (total, longest, count, longestEv)
+        return (total, longest, pairs.count, longestEv)
     }
 
     private func peakTimeWindow(events: [WiFiEvent]) -> String? {
