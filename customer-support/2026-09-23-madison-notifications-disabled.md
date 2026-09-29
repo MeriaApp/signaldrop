@@ -48,3 +48,8 @@ Please let me know how it goes after a few nights. And if there's anything you'd
 Jesse
 
 **Follow up** when Madison reports back: feature requests go to the work queue.
+
+## 2026-09-29 11:35 AM: Madison's feature request
+Asked for Ethernet-only support: their Mac mini is Ethernet-only and they want to compare it with their MacBook Pro on WiFi. Checked against the code: with WiFi off, internet loss is logged to History but the alert is suppressed (`SignalDropApp.sendNotification`), the ISP receipt ignores it, and wired link loss isn't tracked. Queued as `~/.claude/work-queue/dropout/open/P2-2026-09-29-ethernet-only-monitoring.md`.
+
+Third reply drafted at ~/Desktop/madison-reply.txt (NOT sent): thanks, explains the current Ethernet behavior, commits to adding Ethernet support with no date, notes one purchase covers both Macs.
