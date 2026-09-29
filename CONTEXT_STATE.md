@@ -478,3 +478,11 @@ Jesse: "if the claim is an important one, let's make sure we have it." Built it 
 - Madison's reply sent via Resend `01a0ee0a-65c8-752d-b5ee-535c93451f2f` (delivered).
 
 **Next:** on approval, email Madison that it's live (Jesse's go), and check jessemeria.com/signaldrop copy for WiFi-only wording. First Ethernet user report is the real-hardware check.
+
+### 2026-09-29 13:12 — Session close: Madison's Ethernet request, answered and shipped as 1.3.0
+
+**Shipped:** Madison reply sent (Resend `01a0ee0a-…`, delivered). Ethernet support `5260885` → 1.3.0 (10) submitted (`d55cc272-…`, WAITING_FOR_REVIEW), tag `v1.3.0`. Logs `0f8bc6d`, `e0b8611`. Queue item `P2-2026-09-29-ethernet-only-monitoring` closed in done/. Details in the 1.3.0 entry above.
+**Why:** Jesse's "go ahead and build and ship it" after I estimated it at one session. Wired outages are modelled as disconnect/connect pairs on network "Ethernet" (bssid "wired") rather than a new event type, so every existing surface (alerts, phantom hold, History, grade, stats, receipt) counts them with no new UI; the cost was pairing per connection, done once in `WiFiEvent.outagePairs`. A laptop unplugged onto working WiFi is not an outage, because a USB-C dongle unplug would otherwise leave an open outage wrecking the grade. The link-vs-ISP cause comes from path status alone (no second per-interface monitor), since an unsatisfied path on a wired primary is the pulled-cable case.
+**Didn't work:** (1) First `overEthernet` rule counted tracking that starts in the same evaluation, so a launch-mid-outage restore was swallowed; the self-test caught it, fixed to "tracked before or outage open". (2) `curl` globbed the `filter[app]=` brackets in the ASC builds query; use `/v1/apps/{id}/builds` or `curl -g`. (3) `grep '^RESEND'` on ~/.keys finds nothing: lines are `export `-prefixed.
+**Outstanding:** Not tested on real Ethernet; the sandboxed tether-name lookup wasn't exercised.
+**Next:** On approval: note to Madison that it's live (send on Jesse's go), check jessemeria.com/signaldrop for WiFi-only wording. Queue item for sleep-fix overnight check (`P2-2026-09-23-verify-sleep-fix-overnight`) is still open.
