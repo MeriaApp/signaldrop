@@ -52,4 +52,6 @@ Jesse
 ## 2026-09-29 11:35 AM: Madison's feature request
 Asked for Ethernet-only support: their Mac mini is Ethernet-only and they want to compare it with their MacBook Pro on WiFi. Checked against the code: with WiFi off, internet loss is logged to History but the alert is suppressed (`SignalDropApp.sendNotification`), the ISP receipt ignores it, and wired link loss isn't tracked. Queued as `~/.claude/work-queue/dropout/open/P2-2026-09-29-ethernet-only-monitoring.md`.
 
-Third reply drafted at ~/Desktop/madison-reply.txt (NOT sent): thanks, explains the current Ethernet behavior, commits to adding Ethernet support with no date, notes one purchase covers both Macs.
+Third reply SENT 2026-09-29 16:40 UTC via Resend (id 01a0ee0a-65c8-752d-b5ee-535c93451f2f, delivered), on Jesse's instruction: thanks, explains the current Ethernet behavior, commits to Ethernet support with no date, notes one purchase covers both Macs.
+
+Built the same day: 1.3.0 (10) submitted for review with Ethernet support. **Follow up** when it's approved: tell Madison it's live.

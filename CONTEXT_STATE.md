@@ -465,3 +465,16 @@ Jesse: "if the claim is an important one, let's make sure we have it." Built it 
 - With Jesse's go, the build 8 review submission `32e5cac5` was cancelled while still WAITING_FOR_REVIEW. Build 9 (`b68ef419-1650-425f-9f51-af4b969a0044`) was attached to the same version `8e3172b5`, a What's New bullet and a review-note bullet were added, and it was resubmitted as `ea9fafc7-996d-4028-b93c-3726fed20009` (WAITING_FOR_REVIEW, AFTER_APPROVAL). Tag `v1.2.0-b9`; `v1.2.0` still marks build 8.
 - Checked: the Release archive is universal, entitlements match build 8, and the fix symbols are in the binary. The sandboxed archive build is running on Jesse's Mac in place of /Applications (build 5), making its connectivity check with no sandbox denials. NOT yet checked through a real sleep: after the next overnight sleep, compare its History (~/Library/Containers/com.meria.signaldrop/.../events.db) against `pmset -g log`.
 - Madison reply draft (unsent): ~/Desktop/madison-reply.txt, covering how to keep the Mac awake overnight and inviting feature requests.
+
+---
+
+### 2026-09-29 — 1.3.0 (10) SUBMITTED: Ethernet outage support
+
+- Why: Madison (m@golee.com) runs an Ethernet-only Mac mini and wants to compare it with a MacBook Pro on WiFi. Before this, wired internet loss was logged but never alerted, and every report paired only WiFi disconnects.
+- What (`5260885`, tag `v1.3.0`): `NetworkMonitor` tracks when Ethernet carries the internet and reports an outage when the Mac goes offline over it (cause "Ethernet link lost" if the path is gone, "ISP outage suspected" if the path is up but the check fails). Undocking onto working WiFi is not an outage. The app logs it as a disconnect/connect pair on network "Ethernet" (bssid marker "wired"), so alerts, phantom hold, History, grade, stats and receipt count it. `WiFiEvent.outagePairs` replaces six copies of the pairing loop and pairs per connection. Menu reads "Online via Ethernet" (tethers show their system name, e.g. "iPhone USB").
+- Checked: both schemes build; `SignalDrop -ethernetSelfTest` 8/8 pass (ISP outage, cable pull, undock to WiFi, WiFi-only Mac, WiFi takeover mid-outage, launch mid-outage, overlapping WiFi/Ethernet pairing, WiFi-only pairing unchanged); `-reviewSelfTest` still passes; the Debug build ran on this WiFi Mac against the real 105-event history with no crash and no spurious events. Release archive: universal, entitlements identical to build 9, no Sparkle.
+- NOT checked on real Ethernet hardware (this Mac has none active), and the SystemConfiguration tether-name lookup was not exercised under the sandbox. If it fails there, a tether is labeled and tracked as "Ethernet" (graceful, not a crash).
+- ASC: version `2c6b1b8b-d80a-4379-9939-3aa985989e58`, build `8bb20254-1d3e-4605-a86b-e22896a6d097` (10), review submission `d55cc272-841e-447f-9335-9f5d72f01571`, WAITING_FOR_REVIEW, AFTER_APPROVAL. Description gained one Ethernet bullet; What's New and review notes updated; promo and keywords unchanged.
+- Madison's reply sent via Resend `01a0ee0a-65c8-752d-b5ee-535c93451f2f` (delivered).
+
+**Next:** on approval, email Madison that it's live (Jesse's go), and check jessemeria.com/signaldrop copy for WiFi-only wording. First Ethernet user report is the real-hardware check.
