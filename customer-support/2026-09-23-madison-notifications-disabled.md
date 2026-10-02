@@ -92,3 +92,24 @@ If that folder has no SignalDrop files, the app didn't crash. Something closed i
 The second of those updates is the one you asked for. Version 1.3 is out now and tracks outages on Ethernet, so your Mac mini can be compared with your MacBook Pro. If the App Store hasn't installed it yet, you'll find it under Updates.
 
 Jesse
+
+## 2026-10-02: reply actually sent (replaces the draft above)
+Jesse judged the full crash-report walkthrough too heavy for this app and asked to lead with "update to 1.3". Sent on his go: Resend id 01a0fd79-7337-7ce4-9607-5b0dcadaf4b0 (last_event: delivered at log time), subject "Re: SignalDrop support".
+
+Stability check first: the sandboxed 1.2.0 (9) archive build ran on Jesse's Mac from 2026-09-29 12:48 to 2026-10-02 (2d 23h) with no crash report and 41 MB RSS. It was then swapped for the 1.3.0 (10) archive build to soak. Neither covers wired hardware.
+
+---
+
+Hi Madison,
+
+Sorry about that, and thanks for telling me.
+
+First, please make sure you're on the newest version. Version 1.3 is out now, and it's the one you asked for: it tracks outages on Ethernet, so your Mac mini can be compared with your MacBook Pro. Open the App Store, go to Updates, and install it on both Macs. To confirm, open the SignalDrop menu and choose About SignalDrop. It should say Version 1.3.0.
+
+There have been two updates in the last ten days, and an App Store update closes the app to install the new version without always reopening it. That may be some of what you saw. Turning on Launch at Login in the SignalDrop menu brings it back after a restart.
+
+If it quits again once you're on 1.3, macOS will have saved a report I can use. In Finder, choose Go > Go to Folder, paste ~/Library/Logs/DiagnosticReports, and send me any file whose name starts with "SignalDrop", along with which Mac it was. That's all I'd need to find it.
+
+Jesse
+
+**Follow up:** if Madison reports another quit on 1.3.0, get the .ips and which Mac.
