@@ -493,3 +493,9 @@ Jesse: "if the claim is an important one, let's make sure we have it." Built it 
 - **Cleaned:** agent plist, `~/Library/Application Support/Dropout/` (1.1 GB log) and 144 `dropout-*.ips` moved to `~/.Trash/dropout-prototype-2026-10-02/`.
 - **Shipped `89ca28e`:** README install now links the App Store; `install.sh`/`uninstall.sh` remove the prototype agent and folder (block tested against a fake HOME, twice).
 - **Still running on purpose:** the 1.3.0 (10) soak build from `build/SignalDrop-v1.3.0-b10.xcarchive/.../SignalDrop.app` (started 2026-10-02, no crash reports). Stop with `pkill -f SignalDrop-v1.3.0-b10.xcarchive`; `/Applications/SignalDrop.app` is still the 1.0.2 DMG build.
+
+### 2026-10-02/03 — Madison's "app quit on its own" report; 1.3.0 soak on Jesse's Mac
+
+- Madison reported SignalDrop quitting several times. Reply sent (Resend `01a0fd79-…`, delivered) asking them to update to 1.3 and send a `~/Library/Logs/DiagnosticReports/SignalDrop*` report if it recurs. Madison replied that 1.3 works fine on the Ethernet Mac mini, the first real-hardware report for the Ethernet path. Thread log: `customer-support/2026-09-23-madison-notifications-disabled.md`.
+- Before replying: the sandboxed 1.2.0 (9) archive build had run on Jesse's Mac for 2d 23h with no crash report.
+- **Still running on purpose:** the 1.3.0 (10) archive build, `build/SignalDrop-v1.3.0-b10.xcarchive/Products/Applications/SignalDrop.app`, as a soak in place of the 1.2.0 (9) build. Check it with `ls ~/Library/Logs/DiagnosticReports | grep -i signaldrop` (expect none). Stop it with `pkill -x SignalDrop`; `/Applications/SignalDrop.app` is still 1.0.2 (5), so install 1.3.0 from the App Store if a normal copy is wanted.

@@ -113,3 +113,6 @@ If it quits again once you're on 1.3, macOS will have saved a report I can use. 
 Jesse
 
 **Follow up:** if Madison reports another quit on 1.3.0, get the .ips and which Mac.
+
+## 2026-10-02 12:59 PM: Madison's reply
+"Perfect! It's working fine on my Ethernet Mac Mini. I'll keep an eye on things and report if any of them goes down for any reason." Madison has updated to 1.3, and this is the first report of the Ethernet build running on real wired hardware. No reply needed. Checked Gmail 2026-10-03: nothing else from m@golee.com.
