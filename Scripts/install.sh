@@ -14,6 +14,11 @@ BUNDLE_ID="com.meria.signaldrop"
 DEST="/Applications/$APP_NAME.app"
 LEGACY_LAUNCH_AGENT="$HOME/Library/LaunchAgents/$BUNDLE_ID.plist"
 LEGACY_INSTALL_DIR="$HOME/Library/Application Support/$APP_NAME"
+# The pre-rename prototype (first commit) installed a bare binary under this
+# label with KeepAlive; it crashes at launch and launchd restarts it forever.
+PROTOTYPE_LABEL="com.meria.dropout"
+PROTOTYPE_LAUNCH_AGENT="$HOME/Library/LaunchAgents/$PROTOTYPE_LABEL.plist"
+PROTOTYPE_INSTALL_DIR="$HOME/Library/Application Support/Dropout"
 
 echo "Building $APP_NAME (ReleaseDirect via Xcode — full feature set + Sparkle)..."
 xcodegen generate --quiet
@@ -43,6 +48,12 @@ fi
 if [ -f "$LEGACY_INSTALL_DIR/signaldrop" ]; then
     echo "Removing legacy binary at $LEGACY_INSTALL_DIR/signaldrop..."
     rm -f "$LEGACY_INSTALL_DIR/signaldrop" "$LEGACY_INSTALL_DIR/signaldrop.log"
+fi
+if [ -f "$PROTOTYPE_LAUNCH_AGENT" ] || [ -d "$PROTOTYPE_INSTALL_DIR" ]; then
+    echo "Removing pre-rename Dropout prototype..."
+    launchctl bootout "gui/$(id -u)/$PROTOTYPE_LABEL" 2>/dev/null || true
+    rm -f "$PROTOTYPE_LAUNCH_AGENT"
+    rm -rf "$PROTOTYPE_INSTALL_DIR"
 fi
 
 echo "Installing to $DEST..."

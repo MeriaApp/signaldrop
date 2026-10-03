@@ -12,6 +12,9 @@ LAUNCH_AGENT="$HOME/Library/LaunchAgents/$BUNDLE_ID.plist"
 BINARY="$INSTALL_DIR/signaldrop"
 LOG_FILE="$INSTALL_DIR/signaldrop.log"
 APP_BUNDLE="/Applications/$APP_NAME.app"
+PROTOTYPE_LABEL="com.meria.dropout"
+PROTOTYPE_LAUNCH_AGENT="$HOME/Library/LaunchAgents/$PROTOTYPE_LABEL.plist"
+PROTOTYPE_INSTALL_DIR="$HOME/Library/Application Support/Dropout"
 
 echo "Stopping $APP_NAME..."
 launchctl bootout "gui/$(id -u)/$BUNDLE_ID" 2>/dev/null || true
@@ -25,6 +28,13 @@ fi
 if [ -f "$BINARY" ]; then
     echo "Removing direct-install binary..."
     rm -f "$BINARY" "$LOG_FILE"
+fi
+
+if [ -f "$PROTOTYPE_LAUNCH_AGENT" ] || [ -d "$PROTOTYPE_INSTALL_DIR" ]; then
+    echo "Removing pre-rename Dropout prototype..."
+    launchctl bootout "gui/$(id -u)/$PROTOTYPE_LABEL" 2>/dev/null || true
+    rm -f "$PROTOTYPE_LAUNCH_AGENT"
+    rm -rf "$PROTOTYPE_INSTALL_DIR"
 fi
 
 if [ -d "$APP_BUNDLE" ]; then

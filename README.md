@@ -8,9 +8,9 @@ macOS silently drops WiFi and hopes you notice. You're on a Zoom call, pushing c
 
 ## Install
 
-### Download (recommended)
+### Mac App Store (recommended)
 
-Download `SignalDrop-1.0.0.dmg` from the [Releases](https://github.com/MeriaApp/signaldrop/releases) page. Open the DMG and drag SignalDrop to your Applications folder.
+Get [SignalDrop on the Mac App Store](https://apps.apple.com/app/id6761185430?ct=signaldrop_github_readme&mt=12). Updates arrive through the App Store.
 
 ### Build from source
 
@@ -136,7 +136,7 @@ SignalDrop runs entirely on your Mac and collects no data. No analytics. No tele
 
 1. Quit SignalDrop from the menu bar
 2. Delete `SignalDrop.app` from Applications
-3. Optionally remove data: `rm -rf ~/Library/Application\ Support/SignalDrop`
+3. Optionally remove its data: `rm -rf ~/Library/Containers/com.meria.signaldrop` (Mac App Store) or `rm -rf ~/Library/Application\ Support/SignalDrop` (built from source)
 
 ## Why "SignalDrop"?
 
