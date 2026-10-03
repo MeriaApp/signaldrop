@@ -486,3 +486,10 @@ Jesse: "if the claim is an important one, let's make sure we have it." Built it 
 **Didn't work:** (1) First `overEthernet` rule counted tracking that starts in the same evaluation, so a launch-mid-outage restore was swallowed; the self-test caught it, fixed to "tracked before or outage open". (2) `curl` globbed the `filter[app]=` brackets in the ASC builds query; use `/v1/apps/{id}/builds` or `curl -g`. (3) `grep '^RESEND'` on ~/.keys finds nothing: lines are `export `-prefixed.
 **Outstanding:** Not tested on real Ethernet; the sandboxed tether-name lookup wasn't exercised.
 **Next:** On approval: note to Madison that it's live (send on Jesse's go), check jessemeria.com/signaldrop for WiFi-only wording. Queue item for sleep-fix overnight check (`P2-2026-09-23-verify-sleep-fix-overnight`) is still open.
+
+### 2026-10-02 — Dropout prototype crash loop removed; README points at the App Store
+
+- **Found:** Jesse's Mac was slow. `com.meria.dropout`, the bare-binary KeepAlive agent from the first commit `85be2b4`, had crashed at launch (`UNUserNotificationCenter` needs an app bundle) about 646k times since 2026-03-26, with ReportCrash pushing load past 500. It isn't in anything users get: the App Store build and both public DMGs (v1.0.0, 9 downloads; v1.0.2, 14) are notarized `com.meria.signaldrop` bundles with no launch agent, and Launch at Login uses `SMAppService.mainApp`, which doesn't restart the app after a crash. Madison's "app quits" report is a separate issue.
+- **Cleaned:** agent plist, `~/Library/Application Support/Dropout/` (1.1 GB log) and 144 `dropout-*.ips` moved to `~/.Trash/dropout-prototype-2026-10-02/`.
+- **Shipped `89ca28e`:** README install now links the App Store; `install.sh`/`uninstall.sh` remove the prototype agent and folder (block tested against a fake HOME, twice).
+- **Still running on purpose:** the 1.3.0 (10) soak build from `build/SignalDrop-v1.3.0-b10.xcarchive/.../SignalDrop.app` (started 2026-10-02, no crash reports). Stop with `pkill -f SignalDrop-v1.3.0-b10.xcarchive`; `/Applications/SignalDrop.app` is still the 1.0.2 DMG build.
