@@ -4,7 +4,7 @@ A lightweight macOS menu bar app that notifies you the instant your WiFi drops.
 
 macOS silently drops WiFi and hopes you notice. You're on a Zoom call, pushing code, or downloading something important — and the connection just vanishes. No notification. No sound. Nothing. You find out minutes later when things stop working.
 
-**SignalDrop** fixes that. It uses Apple's CoreWLAN framework for **event-driven** monitoring (zero polling, zero battery impact) and sends a native macOS notification the moment your connection drops.
+**SignalDrop** fixes that. It uses Apple's CoreWLAN framework, so macOS tells it the moment your WiFi changes instead of it polling, and sends a native macOS notification when your connection drops. To catch a network that shows full bars while the internet is down, it checks every 30 seconds that Apple's connectivity check answers. Battery impact is negligible.
 
 ## Install
 
@@ -26,18 +26,17 @@ open .build/app/SignalDrop.app
 - **Instant disconnect/reconnect notifications** with downtime duration ("Back online after 47s")
 - **Signal degradation warnings** before drops happen (-75 dBm threshold)
 - **SSID change detection** — know when your Mac silently switches networks
-- **"Connected but no internet"** detection via NWPathMonitor
+- **"Connected but no internet"** detection: a check every 30 seconds against the same Apple connectivity endpoint macOS uses
 - **Menu bar status icon** — live signal quality indicator
 - **Event log** with SQLite storage and CSV export for ISP troubleshooting
-- **Event hooks** — run custom scripts on WiFi events (Slack alerts, home automation, etc.)
+- **Event hooks** (build from source only, not in the App Store version) — run custom scripts on WiFi events (Slack alerts, home automation, etc.)
 - **Notification throttling** — smart deduplication prevents spam during WiFi flapping
 - **Daily stats** — disconnects and total downtime at a glance
 - **Launch at login** — set it and forget it
-- **Signed with Developer ID** — no Gatekeeper warnings
 
 ## How It Works
 
-Unlike shell-script hacks that poll every N seconds, SignalDrop registers for CoreWLAN events directly. The OS tells SignalDrop when something changes — no polling loop, no wasted battery, no missed events between polls.
+Unlike shell-script hacks that poll WiFi every N seconds, SignalDrop registers for CoreWLAN events directly. The OS tells SignalDrop when the WiFi link changes, so no event is missed between polls. The one periodic task is the 30-second internet check.
 
 | Monitor | What it catches |
 |---------|----------------|
@@ -45,7 +44,7 @@ Unlike shell-script hacks that poll every N seconds, SignalDrop registers for Co
 | `CWEventDelegate.ssidDidChange` | Network switches |
 | `CWEventDelegate.linkQualityDidChange` | Signal degradation/recovery |
 | `CWEventDelegate.powerDidChange` | WiFi radio on/off |
-| `NWPathMonitor` | Internet reachability (WiFi up but no internet) |
+| 30-second check to `captive.apple.com` | Internet reachability (WiFi up but no internet) |
 
 ## Menu Bar
 
@@ -75,6 +74,8 @@ Click the WiFi icon in your menu bar:
 ```
 
 ## Event Hooks
+
+Event hooks exist only when you build SignalDrop from source. The Mac App Store version is sandboxed and does not run scripts.
 
 Run custom scripts when WiFi events happen. Place executable `.sh` files in:
 
