@@ -61,6 +61,9 @@ targetTemplates:
       - path: Resources/oui-vendors.json
         type: file
         buildPhase: resources
+      - path: Resources/PrivacyInfo.xcprivacy
+        type: file
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.meria.signaldrop
